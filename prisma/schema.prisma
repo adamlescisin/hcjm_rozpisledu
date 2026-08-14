@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Venue {
+  id       String   @id @default(cuid())
+  name     String
+  address  String?
+  timezone String   @default("Europe/Prague")
+  events   Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("venues")
+}
+
+model EventCategory {
+  id            String  @id @default(cuid())
+  name          String
+  color         String
+  icon          String?
+  defaultDurationMinutes Int @default(60) @map("default_duration_minutes")
+
+  requiresResurfacingBefore Boolean @default(false) @map("requires_resurfacing_before")
+  requiresResurfacingAfter  Boolean @default(false) @map("requires_resurfacing_after")
+  resurfacingBeforeMinutes  Int     @default(15) @map("resurfacing_before_minutes")
+  resurfacingAfterMinutes   Int     @default(15) @map("resurfacing_after_minutes")
+
+  isActive Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  events     Event[]
+  priceRules PriceRule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("event_categories")
+}
+
+model RecurrenceRule {
+  id             String   @id @default(cuid())
+  frequency      RecurrenceFrequency
+  interval       Int      @default(1)
+  daysOfWeek     Int[]    @map("days_of_week")
+  untilDate      DateTime? @map("until_date")
+  occurrenceCount Int?    @map("occurrence_count")
+  exceptions     DateTime[] @map("exceptions")
+
+  events Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("recurrence_rules")
+}
+
+model Event {
+  id          String  @id @default(cuid())
+  venueId     String  @map("venue_id")
+  categoryId  String  @map("category_id")
+  title       String
+  description String?
+
+  startDatetime DateTime @map("start_datetime")
+  endDatetime   DateTime @map("end_datetime")
+
+  recurrenceRuleId String? @map("recurrence_rule_id")
+  recurrenceIndex  Int?    @map("recurrence_index")
+
+  status    EventStatus @default(CONFIRMED)
+  createdBy String?     @map("created_by")
+
+  // Future booking fields — not active in v1
+  capacity     Int?    @map("capacity")
+  isBookable   Boolean @default(false) @map("is_bookable")
+  priceRuleId  String? @map("price_rule_id")
+
+  venue          Venue          @relation(fields: [venueId], references: [id])
+  category       EventCategory  @relation(fields: [categoryId], references: [id])
+  recurrenceRule RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([venueId])
+  @@index([categoryId])
+  @@index([startDatetime])
+  @@index([recurrenceRuleId])
+  @@map("events")
+}
+
+model PriceRule {
+  id         String  @id @default(cuid())
+  categoryId String? @map("category_id")
+  label      String
+
+  dayOfWeekFrom Int? @map("day_of_week_from")
+  dayOfWeekTo   Int? @map("day_of_week_to")
+  timeFrom      String? @map("time_from")
+  timeTo        String? @map("time_to")
+
+  priceCzk Int @map("price_czk")
+
+  validFrom DateTime? @map("valid_from")
+  validTo   DateTime? @map("valid_to")
+
+  isActive Boolean @default(true) @map("is_active")
+
+  category EventCategory? @relation(fields: [categoryId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("price_rules")
+}
+
+model ThemeSettings {
+  id             String  @id @default(cuid())
+  primaryColor   String  @default("#003d80") @map("primary_color")
+  secondaryColor String  @default("#c8102e") @map("secondary_color")
+  accentColor    String  @default("#f5a623") @map("accent_color")
+  fontHeading    String  @default("Inter") @map("font_heading")
+  fontBody       String  @default("Inter") @map("font_body")
+  logoUrl        String? @map("logo_url")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("theme_settings")
+}
+
+model AdminUser {
+  id    String    @id @default(cuid())
+  email String    @unique
+  name  String?
+  role  AdminRole @default(ADMIN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum EventStatus {
+  CONFIRMED
+  CANCELLED
+  TENTATIVE
+}
+
+enum AdminRole {
+  ADMIN
+}
