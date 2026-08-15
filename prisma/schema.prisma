@@ -13,8 +13,8 @@ model Venue {
   timezone String   @default("Europe/Prague")
   events   Event[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("venues")
 }
@@ -37,8 +37,8 @@ model EventCategory {
   events     Event[]
   priceRules PriceRule[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("event_categories")
 }
@@ -54,8 +54,8 @@ model RecurrenceRule {
 
   events Event[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("recurrence_rules")
 }
@@ -85,8 +85,8 @@ model Event {
   category       EventCategory  @relation(fields: [categoryId], references: [id])
   recurrenceRule RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@index([venueId])
   @@index([categoryId])
@@ -114,8 +114,8 @@ model PriceRule {
 
   category EventCategory? @relation(fields: [categoryId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("price_rules")
 }
@@ -129,8 +129,8 @@ model ThemeSettings {
   fontBody       String  @default("Inter") @map("font_body")
   logoUrl        String? @map("logo_url")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("theme_settings")
 }
@@ -141,8 +141,8 @@ model AdminUser {
   name  String?
   role  AdminRole @default(ADMIN)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("admin_users")
 }
