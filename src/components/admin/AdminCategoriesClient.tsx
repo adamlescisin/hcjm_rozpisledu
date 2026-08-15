@@ -1,3 +1,153 @@
+"use client";
+
+import { useState } from "react";
+import { EventCategory } from "@prisma/client";
+import { Plus, Pencil, Trash2, Save, X, Loader2, GripVertical } from "lucide-react";
+
+const PRESET_COLORS = [
+  "#EAB308",
+  "#C8102E",
+  "#3B82F6",
+  "#22C55E",
+  "#8B5CF6",
+  "#F97316",
+  "#06B6D4",
+  "#EC4899",
+  "#6B7280",
+];
+
+interface Props {
+  categories: EventCategory[];
+}
+
+const emptyForm = {
+  name: "",
+  color: PRESET_COLORS[0],
+  icon: "",
+  defaultDurationMinutes: 60,
+  requiresIceResurfacingBefore: false,
+  requiresIceResurfacingAfter: false,
+  resurfacingDurationMinutes: 15,
+  isActive: true,
+  sortOrder: 0,
+};
+
+export default function AdminCategoriesClient({ categories: initial }: Props) {
+  const [categories, setCategories] = useState(initial);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async (id?: string) => {
+    setLoading(true);
+    setError(null);
+
+    const url = id ? `/api/admin/categories/${id}` : "/api/admin/categories";
+    const method = id ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, sortOrder: id ? form.sortOrder : categories.length }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Chyba");
+      setLoading(false);
+      return;
+    }
+
+    if (id) {
+      setCategories((prev) => prev.map((c) => (c.id === id ? data : c)));
+      setEditId(null);
+    } else {
+      setCategories((prev) => [...prev, data]);
+      setShowAdd(false);
+      setForm(emptyForm);
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Smazat kategorii? Pokud má přiřazené události, nebude to možné.")) return;
+    const res = await fetch(`/api/admin/categories/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error);
+      return;
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const startEdit = (cat: EventCategory) => {
+    setEditId(cat.id);
+    setForm({
+      name: cat.name,
+      color: cat.color,
+      icon: cat.icon ?? "",
+      defaultDurationMinutes: cat.defaultDurationMinutes,
+      requiresIceResurfacingBefore: cat.requiresIceResurfacingBefore,
+      requiresIceResurfacingAfter: cat.requiresIceResurfacingAfter,
+      resurfacingDurationMinutes: cat.resurfacingDurationMinutes,
+      isActive: cat.isActive,
+      sortOrder: cat.sortOrder,
+    });
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-gray-900">Kategorie</h1>
+        <button
+          onClick={() => { setShowAdd(true); setEditId(null); setForm(emptyForm); }}
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          <Plus size={16} />
+          Nová kategorie
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="mb-4">
+          <CategoryForm
+            form={form}
+            setForm={setForm}
+            onSave={() => handleSave()}
+            onCancel={() => setShowAdd(false)}
+            loading={loading}
+            error={error}
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {categories.length === 0 && !showAdd && (
+          <div className="text-center py-10 text-gray-400 text-sm">
+            Žádné kategorie. Vytvořte první!
+          </div>
+        )}
+        {categories.map((cat) => (
+          <div key={cat.id} className="bg-white rounded-xl border overflow-hidden">
+            {editId === cat.id ? (
+              <div className="p-4">
+                <CategoryForm
+                  form={form}
+                  setForm={setForm}
+                  onSave={() => handleSave(cat.id)}
+                  onCancel={() => setEditId(null)}
+                  loading={loading}
+                  error={error}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <GripVertical size={16} className="text-gray-300 flex-shrink-0" />
+                <div
+                  className="w-8 h-8 rounded-lg flex-shrink-0"
+                  style={{ backgroundColor: cat.color }}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
