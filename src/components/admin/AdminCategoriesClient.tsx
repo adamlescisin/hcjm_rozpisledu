@@ -90,10 +90,10 @@ export default function AdminCategoriesClient({ categories: initial }: Props) {
       color: cat.color,
       icon: cat.icon ?? "",
       defaultDurationMinutes: cat.defaultDurationMinutes,
-      requiresResurfacingBefore: cat.requiresResurfacingBefore,
-      requiresResurfacingAfter: cat.requiresResurfacingAfter,
-      resurfacingBeforeMinutes: cat.resurfacingBeforeMinutes,
-      resurfacingAfterMinutes: cat.resurfacingAfterMinutes,
+      requiresIceResurfacingBefore: cat.requiresIceResurfacingBefore,
+      requiresIceResurfacingAfter: cat.requiresIceResurfacingAfter,
+      resurfacingDurationMinutes: cat.resurfacingDurationMinutes,
+      resurfacingDurationMinutes: cat.resurfacingDurationMinutes,
       isActive: cat.isActive,
       sortOrder: cat.sortOrder,
     });
@@ -158,14 +158,14 @@ export default function AdminCategoriesClient({ categories: initial }: Props) {
                     {!cat.isActive && (
                       <span className="text-xs text-gray-400 bg-gray-100 px-1.5 rounded">Neaktivní</span>
                     )}
-                    {(cat.requiresResurfacingBefore || cat.requiresResurfacingAfter) && (
+                    {(cat.resurfacingDurationMinutes || cat.resurfacingDurationMinutes) && (
                       <span className="text-xs text-blue-600 bg-blue-50 px-1.5 rounded">Úprava ledu</span>
                     )}
                   </div>
                   <div className="text-xs text-gray-400">
                     {cat.defaultDurationMinutes} min
-                    {cat.requiresResurfacingBefore && ` · ${cat.resurfacingBeforeMinutes} min před`}
-                    {cat.requiresResurfacingAfter && ` · ${cat.resurfacingAfterMinutes} min po`}
+                    {cat.resurfacingDurationMinutes && ` · ${cat.resurfacingDurationMinutes} min před`}
+                    {cat.resurfacingDurationMinutes && ` · ${cat.resurfacingDurationMinutes} min po`}
                   </div>
                 </div>
                 <div className="flex gap-1">
