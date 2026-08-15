@@ -7,7 +7,7 @@ datasource db {
 }
 
 model Venue {
-  id       String   @id @default(cuid())
+  id String @id @default(uuid()) @db.Uuid
   name     String
   address  String?
   timezone String   @default("Europe/Prague")
@@ -20,7 +20,7 @@ model Venue {
 }
 
 model EventCategory {
-  id            String  @id @default(cuid())
+  id String @id @default(uuid()) @db.Uuid
   name          String
   color         String
   icon          String?
@@ -43,7 +43,7 @@ model EventCategory {
 }
 
 model RecurrenceRule {
-  id             String   @id @default(cuid())
+  id String @id @default(uuid()) @db.Uuid
   frequency      RecurrenceFrequency
   interval       Int      @default(1)
   daysOfWeek     Int[]    @map("days_of_week")
@@ -60,16 +60,19 @@ updatedAt DateTime @updatedAt      @map("updated_at")
 }
 
 model Event {
-  id          String  @id @default(cuid())
-  venueId     String  @map("venue_id")
-  categoryId  String  @map("category_id")
+  id String @id @default(uuid()) @db.Uuid
+  venueId          String  @db.Uuid @map("venue_id")
+  categoryId       String  @db.Uuid @map("category_id")
+  recurrenceRuleId String? @db.Uuid @map("recurrence_rule_id")
+  priceRuleId      String? @db.Uuid @map("price_rule_id")
+
   title       String
   description String?
 
   startDatetime DateTime @map("start_datetime")
   endDatetime   DateTime @map("end_datetime")
 
-  recurrenceRuleId String? @map("recurrence_rule_id")
+  
   recurrenceIndex  Int?    @map("recurrence_index")
 
   status    EventStatus @default(CONFIRMED)
@@ -78,8 +81,7 @@ model Event {
   // Future booking fields — not active in v1
   capacity     Int?    @map("capacity")
   isBookable   Boolean @default(false) @map("is_bookable")
-  priceRuleId  String? @map("price_rule_id")
-
+  
   venue          Venue          @relation(fields: [venueId], references: [id])
   category       EventCategory  @relation(fields: [categoryId], references: [id])
   recurrenceRule RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
@@ -95,8 +97,8 @@ updatedAt DateTime @updatedAt      @map("updated_at")
 }
 
 model PriceRule {
-  id         String  @id @default(cuid())
-  categoryId String? @map("category_id")
+  id String @id @default(uuid()) @db.Uuid
+  categoryId String? @db.Uuid @map("category_id")
   label      String
 
   dayOfWeekFrom Int? @map("day_of_week_from")
@@ -120,7 +122,7 @@ updatedAt DateTime @updatedAt      @map("updated_at")
 }
 
 model ThemeSettings {
-  id             String  @id @default(cuid())
+  id String @id @default(uuid()) @db.Uuid
   primaryColor   String  @default("#003d80") @map("primary_color")
   secondaryColor String  @default("#c8102e") @map("secondary_color")
   accentColor    String  @default("#f5a623") @map("accent_color")
@@ -135,7 +137,7 @@ updatedAt DateTime @updatedAt      @map("updated_at")
 }
 
 model AdminUser {
-  id    String    @id @default(cuid())
+  id String @id @default(uuid()) @db.Uuid
   email String    @unique
   name  String?
   role  AdminRole @default(ADMIN)
