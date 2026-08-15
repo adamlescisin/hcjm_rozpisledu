@@ -16,7 +16,7 @@ model Venue {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  @@map("venues")
+  @@map("venue")
 }
 
 model EventCategory {
@@ -39,7 +39,7 @@ model EventCategory {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  @@map("event_categories")
+  @@map("event_category")
 }
 
 model RecurrenceRule {
@@ -56,7 +56,7 @@ model RecurrenceRule {
   createdAt DateTime @default(now()) @map("created_at")
 updatedAt DateTime @updatedAt      @map("updated_at")
 
-  @@map("recurrence_rules")
+  @@map("recurrence_rule")
 }
 
 model Event {
@@ -91,7 +91,7 @@ updatedAt DateTime @updatedAt      @map("updated_at")
   @@index([categoryId])
   @@index([startDatetime])
   @@index([recurrenceRuleId])
-  @@map("events")
+  @@map("event")
 }
 
 model PriceRule {
@@ -116,7 +116,7 @@ model PriceRule {
   createdAt DateTime @default(now()) @map("created_at")
 updatedAt DateTime @updatedAt      @map("updated_at")
 
-  @@map("price_rules")
+  @@map("price_rule")
 }
 
 model ThemeSettings {
