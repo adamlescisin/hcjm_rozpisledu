@@ -26,10 +26,9 @@ model EventCategory {
   icon          String?
   defaultDurationMinutes Int @default(60) @map("default_duration_minutes")
 
-  requiresResurfacingBefore Boolean @default(false) @map("requires_resurfacing_before")
-  requiresResurfacingAfter  Boolean @default(false) @map("requires_resurfacing_after")
-  resurfacingBeforeMinutes  Int     @default(15) @map("resurfacing_before_minutes")
-  resurfacingAfterMinutes   Int     @default(15) @map("resurfacing_after_minutes")
+  requiresIceResurfacingBefore Boolean @default(false) @map("requires_ice_resurfacing_before")
+  requiresIceResurfacingAfter  Boolean @default(false) @map("requires_ice_resurfacing_after")
+  resurfacingDurationMinutes   Int     @default(15)    @map("resurfacing_duration_minutes")
 
   isActive Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
