@@ -5,10 +5,9 @@ export const categorySchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Neplatný formát barvy"),
   icon: z.string().optional().nullable(),
   defaultDurationMinutes: z.number().int().min(15).max(480).default(60),
-  requiresResurfacingBefore: z.boolean().default(false),
-  requiresResurfacingAfter: z.boolean().default(false),
-  resurfacingBeforeMinutes: z.number().int().min(5).max(60).default(15),
-  resurfacingAfterMinutes: z.number().int().min(5).max(60).default(15),
+  requiresIceResurfacingBefore: z.boolean().default(false),
+  requiresIceResurfacingAfter: z.boolean().default(false),
+  resurfacingDurationMinutes: z.number().int().min(5).max(60).default(15),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
 });
