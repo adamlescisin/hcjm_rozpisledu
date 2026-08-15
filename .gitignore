@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 .agents/
+.claude/
 .windsurf/
 /.pnp
 .pnp.*
