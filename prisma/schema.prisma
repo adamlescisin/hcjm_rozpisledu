@@ -75,8 +75,9 @@ model Event {
   
   recurrenceIndex  Int?    @map("recurrence_index")
 
-  status    EventStatus @default(CONFIRMED)
-  createdBy String?     @map("created_by")
+  status             EventStatus @default(CONFIRMED)
+  iceResurfacingMode String?     @map("ice_resurfacing_mode")
+  createdBy          String?     @map("created_by")
 
   // Future booking fields — not active in v1
   capacity     Int?    @map("capacity")
