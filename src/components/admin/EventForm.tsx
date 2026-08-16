@@ -7,6 +7,8 @@ import { Loader2, Plus, Minus, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const DAYS_CZ = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 
+type IceMode = "inherit" | "none" | "before" | "after" | "both";
+
 interface EventData {
   id?: string;
   title: string;
@@ -17,6 +19,7 @@ interface EventData {
   categoryId: string;
   venueId: string;
   recurrenceRuleId: string | null;
+  iceResurfacingMode?: string | null;
 }
 
 interface Props {
@@ -28,7 +31,6 @@ interface Props {
 export default function EventForm({ event, categories, venues }: Props) {
   const router = useRouter();
   const isEdit = !!event?.id;
-
   const defaultVenueId = venues[0]?.id ?? "";
 
   const toLocalDatetime = (iso: string) => {
@@ -48,6 +50,14 @@ export default function EventForm({ event, categories, venues }: Props) {
   const [categoryId, setCategoryId] = useState(event?.categoryId ?? categories[0]?.id ?? "");
   const [venueId, setVenueId] = useState(event?.venueId ?? defaultVenueId);
 
+  // Ice resurfacing override
+  const storedMode = event?.iceResurfacingMode;
+  const [iceMode, setIceMode] = useState<IceMode>(
+    storedMode === "none" || storedMode === "before" || storedMode === "after" || storedMode === "both"
+      ? storedMode
+      : "inherit"
+  );
+
   // Recurrence
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState("WEEKLY");
@@ -63,10 +73,32 @@ export default function EventForm({ event, categories, venues }: Props) {
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
 
+  // What ice resurfacing the category implies
+  const categoryBefore = selectedCategory?.requiresIceResurfacingBefore ?? false;
+  const categoryAfter = selectedCategory?.requiresIceResurfacingAfter ?? false;
+  const categoryHasResurfacing = categoryBefore || categoryAfter;
+  const resurfDuration = selectedCategory?.resurfacingDurationMinutes ?? 15;
+
   const toggleDay = (day: number) => {
     setDaysOfWeek((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
+  };
+
+  const iceModeLabel = (mode: IceMode) => {
+    if (mode === "inherit") {
+      const parts = [];
+      if (categoryBefore) parts.push("před");
+      if (categoryAfter) parts.push("po");
+      return parts.length > 0
+        ? `Dle kategorie (${parts.join(" + ")}, ${resurfDuration} min)`
+        : "Dle kategorie (žádná)";
+    }
+    if (mode === "none") return "Žádná";
+    if (mode === "before") return `Před (${resurfDuration} min)`;
+    if (mode === "after") return `Po (${resurfDuration} min)`;
+    if (mode === "both") return `Před i po (${resurfDuration} min)`;
+    return mode;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,6 +118,7 @@ export default function EventForm({ event, categories, venues }: Props) {
       startDatetime: toIso(startDt),
       endDatetime: toIso(endDt),
       status,
+      iceResurfacingMode: iceMode === "inherit" ? null : iceMode,
     };
 
     if (!isEdit && isRecurring) {
@@ -191,7 +224,6 @@ export default function EventForm({ event, categories, venues }: Props) {
               value={startDt}
               onChange={(e) => {
                 setStartDt(e.target.value);
-                // Auto-adjust end time if needed
                 if (selectedCategory && e.target.value) {
                   const start = new Date(e.target.value);
                   const end = new Date(start.getTime() + selectedCategory.defaultDurationMinutes * 60000);
@@ -241,6 +273,39 @@ export default function EventForm({ event, categories, venues }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Ice resurfacing */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Úprava ledu
+            {categoryHasResurfacing && (
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                (kategorie: {categoryBefore && categoryAfter ? "před i po" : categoryBefore ? "před" : "po"}, {resurfDuration} min)
+              </span>
+            )}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {(["inherit", "none", "before", "after", "both"] as IceMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setIceMode(mode)}
+                className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                  iceMode === mode
+                    ? "bg-[var(--color-primary)] border-[var(--color-primary)] text-white"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {mode === "inherit" && "Dle kategorie"}
+                {mode === "none" && "Žádná"}
+                {mode === "before" && "Před"}
+                {mode === "after" && "Po"}
+                {mode === "both" && "Před i po"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-400">{iceModeLabel(iceMode)}</p>
         </div>
 
         {/* Description */}

@@ -108,6 +108,7 @@ export async function PATCH(
         ...(data.status && { status: data.status }),
         ...(data.startDatetime && { startDatetime: new Date(data.startDatetime) }),
         ...(data.endDatetime && { endDatetime: new Date(data.endDatetime) }),
+        ...(data.iceResurfacingMode !== undefined && { iceResurfacingMode: data.iceResurfacingMode }),
       },
       include: { category: true },
     });

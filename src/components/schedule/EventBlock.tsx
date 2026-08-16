@@ -5,14 +5,16 @@ import { EventCategory } from "@prisma/client";
 import { formatTime } from "@/lib/utils";
 import { X, Clock, Tag } from "lucide-react";
 
-interface EventWithCategory {
+export interface EventWithCategory {
   id: string;
   title: string;
   description: string | null;
   startDatetime: string;
   endDatetime: string;
   status: string;
+  categoryId: string;
   category: EventCategory;
+  iceResurfacingMode?: string | null;
 }
 
 interface EventBlockProps {
@@ -105,7 +107,7 @@ export default function EventBlock({ event, compact, mini }: EventBlockProps) {
   );
 }
 
-function EventModal({ event, onClose }: { event: EventWithCategory; onClose: () => void }) {
+export function EventModal({ event, onClose }: { event: EventWithCategory; onClose: () => void }) {
   const start = new Date(event.startDatetime);
   const end = new Date(event.endDatetime);
   const color = event.category.color;
