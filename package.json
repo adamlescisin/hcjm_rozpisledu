@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build",
+    "build": "prisma db execute --file ./prisma/migrations/20260816120000_add_ice_resurfacing_mode/migration.sql --schema ./prisma/schema.prisma && next build",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
