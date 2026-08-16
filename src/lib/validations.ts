@@ -12,8 +12,6 @@ export const categorySchema = z.object({
   sortOrder: z.number().int().default(0),
 });
 
-const iceResurfacingModeSchema = z.enum(["none", "before", "after", "both"]).nullable().optional();
-
 export const eventSchema = z.object({
   venueId: z.string().min(1),
   categoryId: z.string().min(1),
@@ -22,7 +20,6 @@ export const eventSchema = z.object({
   startDatetime: z.string().datetime(),
   endDatetime: z.string().datetime(),
   status: z.enum(["CONFIRMED", "CANCELLED", "TENTATIVE"]).default("CONFIRMED"),
-  iceResurfacingMode: iceResurfacingModeSchema,
   capacity: z.number().int().positive().optional().nullable(),
   isBookable: z.boolean().default(false),
 }).refine(
@@ -38,7 +35,6 @@ export const eventUpdateSchema = z.object({
   startDatetime: z.string().datetime().optional(),
   endDatetime: z.string().datetime().optional(),
   status: z.enum(["CONFIRMED", "CANCELLED", "TENTATIVE"]).optional(),
-  iceResurfacingMode: iceResurfacingModeSchema,
   capacity: z.number().int().positive().optional().nullable(),
   isBookable: z.boolean().optional(),
 });
