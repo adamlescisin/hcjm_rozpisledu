@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Calendar, Tag, DollarSign, Palette, LogOut, LayoutDashboard } from "lucide-react";
+import { Calendar, CalendarDays, Tag, DollarSign, Palette, LogOut, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/admin", label: "Přehled", icon: LayoutDashboard, exact: true },
+  { href: "/admin/calendar", label: "Kalendář", icon: CalendarDays },
   { href: "/admin/events", label: "Události", icon: Calendar },
   { href: "/admin/categories", label: "Kategorie", icon: Tag },
   { href: "/admin/price-rules", label: "Ceny", icon: DollarSign },
