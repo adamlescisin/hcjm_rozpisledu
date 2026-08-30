@@ -19,13 +19,55 @@ interface EventBlockProps {
   event: EventWithCategory;
   compact?: boolean;
   mini?: boolean;
+  timetable?: boolean;
+  timetableStyle?: {
+    left: number;
+    width: number;
+    top: number;
+    height: number;
+  };
 }
 
-export default function EventBlock({ event, compact, mini }: EventBlockProps) {
+export default function EventBlock({ event, compact, mini, timetable, timetableStyle }: EventBlockProps) {
   const [showDetail, setShowDetail] = useState(false);
   const start = new Date(event.startDatetime);
   const end = new Date(event.endDatetime);
   const color = event.category.color;
+
+  if (timetable && timetableStyle) {
+    const { left, width, top, height } = timetableStyle;
+    const isTooNarrow = width < 44;
+    return (
+      <>
+        <button
+          onClick={() => setShowDetail(true)}
+          title={`${event.title}  ${formatTime(start)}–${formatTime(end)}`}
+          className="absolute rounded overflow-hidden text-left hover:brightness-95 transition-all border-l-2"
+          style={{
+            left: left + 1,
+            width: Math.max(width - 2, 4),
+            top: top + 1,
+            height: height - 2,
+            borderLeftColor: color,
+            backgroundColor: color + "22",
+            opacity: event.status === "CANCELLED" ? 0.45 : 1,
+          }}
+        >
+          {!isTooNarrow && (
+            <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+              <div className="text-[10px] font-semibold leading-tight truncate" style={{ color }}>
+                {formatTime(start)}
+              </div>
+              <div className="text-[11px] font-medium leading-tight truncate text-gray-800">
+                {event.title}
+              </div>
+            </div>
+          )}
+        </button>
+        {showDetail && <EventModal event={event} onClose={() => setShowDetail(false)} />}
+      </>
+    );
+  }
 
   if (mini) {
     return (

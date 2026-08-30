@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EventCategory, Venue } from "@prisma/client";
-import { formatTime } from "@/lib/utils";
-import { Plus, Trash2, Edit2, AlertCircle } from "lucide-react";
+import { formatTime, startOfWeek, addDays, isSameDay, CZECH_DAYS_SHORT, formatDateShort } from "@/lib/utils";
+import { Plus, Trash2, Edit2, AlertCircle, ChevronLeft, ChevronRight, LayoutList, CalendarDays } from "lucide-react";
 
 interface EventWithCategory {
   id: string;
@@ -23,11 +24,65 @@ interface Props {
   venues: Venue[];
 }
 
+// ─── Timetable constants ──────────────────────────────────────────────────────
+const PX_PER_HOUR = 80;
+const PX_PER_MIN = PX_PER_HOUR / 60;
+const DAY_LBL_W = 88;
+const ROW_BASE_H = 56;
+const TRACK_H = 48;
+
+function assignAdminTracks(dayEvents: EventWithCategory[]) {
+  const sorted = [...dayEvents].sort(
+    (a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime()
+  );
+  const trackEnds: number[] = [];
+  const assignments = new Map<string, number>();
+  for (const ev of sorted) {
+    const startMs = new Date(ev.startDatetime).getTime();
+    const endMs = new Date(ev.endDatetime).getTime();
+    let t = trackEnds.findIndex((e) => e <= startMs);
+    if (t === -1) t = trackEnds.length;
+    trackEnds[t] = endMs;
+    assignments.set(ev.id, t);
+  }
+  return { assignments, numTracks: Math.max(1, trackEnds.length) };
+}
+
 export default function AdminEventsClient({ initialEvents, categories, venues }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteScope, setDeleteScope] = useState<"this" | "future" | "all">("this");
   const [confirmDelete, setConfirmDelete] = useState<EventWithCategory | null>(null);
+  const [adminView, setAdminView] = useState<"list" | "timetable">("timetable");
+  const [timetableDate, setTimetableDate] = useState(new Date());
+  const [timetableEvents, setTimetableEvents] = useState<EventWithCategory[]>([]);
+  const [timetableLoading, setTimetableLoading] = useState(false);
+
+  const fetchTimetableEvents = useCallback(async (date: Date) => {
+    const weekStart = startOfWeek(date);
+    const weekEnd = addDays(weekStart, 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    setTimetableLoading(true);
+    try {
+      const params = new URLSearchParams({
+        from: weekStart.toISOString(),
+        to: weekEnd.toISOString(),
+      });
+      const res = await fetch(`/api/admin/events?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTimetableEvents(data);
+      }
+    } finally {
+      setTimetableLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (adminView === "timetable") {
+      fetchTimetableEvents(timetableDate);
+    }
+  }, [adminView, timetableDate, fetchTimetableEvents]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -76,15 +131,42 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-xl font-bold text-gray-900">Události</h1>
-        <Link
-          href="/admin/events/new"
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus size={16} />
-          Nová událost
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View toggle */}
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+            <button
+              onClick={() => setAdminView("list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 font-medium transition-colors ${
+                adminView === "list"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <LayoutList size={14} />
+              Seznam
+            </button>
+            <button
+              onClick={() => setAdminView("timetable")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 font-medium transition-colors ${
+                adminView === "timetable"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <CalendarDays size={14} />
+              Rozvrh
+            </button>
+          </div>
+          <Link
+            href="/admin/events/new"
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus size={16} />
+            Nová událost
+          </Link>
+        </div>
       </div>
 
       {venues.length === 0 && (
@@ -94,7 +176,7 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
         </div>
       )}
 
-      <div className="bg-white rounded-xl border overflow-hidden">
+      {adminView === "list" && <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -173,7 +255,22 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
+
+      {/* Timetable view */}
+      {adminView === "timetable" && (
+        <AdminTimetable
+          events={timetableEvents}
+          loading={timetableLoading}
+          timetableDate={timetableDate}
+          onNavigate={(dir) => {
+            const d = new Date(timetableDate);
+            d.setDate(d.getDate() + 7 * dir);
+            setTimetableDate(d);
+          }}
+          onGoToToday={() => setTimetableDate(new Date())}
+        />
+      )}
 
       {/* Delete confirmation modal */}
       {confirmDelete && (
@@ -222,6 +319,336 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Admin timetable component ─────────────────────────────────────────────────
+
+interface AdminTimetableProps {
+  events: EventWithCategory[];
+  loading: boolean;
+  timetableDate: Date;
+  onNavigate: (dir: 1 | -1) => void;
+  onGoToToday: () => void;
+}
+
+function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToday }: AdminTimetableProps) {
+  const router = useRouter();
+  const weekStart = startOfWeek(timetableDate);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const today = new Date();
+
+  const weekEvents = events.filter((e) =>
+    days.some((d) => isSameDay(new Date(e.startDatetime), d))
+  );
+
+  // Derive time range from this week's events, fallback 08:00–22:00
+  let minHour = 8;
+  let maxHour = 22;
+  if (weekEvents.length > 0) {
+    let eMin = 24, eMax = 0;
+    for (const e of weekEvents) {
+      const s = new Date(e.startDatetime);
+      const en = new Date(e.endDatetime);
+      eMin = Math.min(eMin, s.getHours());
+      eMax = Math.max(eMax, en.getHours() + (en.getMinutes() > 0 ? 1 : 0));
+    }
+    minHour = Math.max(0, eMin);
+    maxHour = Math.min(24, eMax);
+  }
+  const totalHours = Math.max(1, maxHour - minHour);
+  const totalMinutes = totalHours * 60;
+  const gridWidth = totalHours * PX_PER_HOUR;
+
+  const hourMarks = Array.from({ length: totalHours + 1 }, (_, i) => minHour + i);
+  const quarterOffsets: number[] = [];
+  for (let h = 0; h < totalHours; h++) {
+    for (let q = 1; q <= 3; q++) quarterOffsets.push(h * 60 + q * 15);
+  }
+
+  function toPixels(minutes: number) {
+    return minutes * PX_PER_MIN;
+  }
+
+  // ── Drag-to-create ────────────────────────────────────────────────────────
+  interface DragState {
+    dayIdx: number;
+    day: Date;
+    startMin: number;
+    currentMin: number;
+    containerLeft: number;
+  }
+  const [drag, setDrag] = useState<DragState | null>(null);
+
+  // Stable refs so the global handlers don't go stale
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const minHourRef = useRef(minHour);
+  minHourRef.current = minHour;
+  const totalMinutesRef = useRef(totalMinutes);
+  totalMinutesRef.current = totalMinutes;
+
+  const isDragging = drag !== null;
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const snapMin = (raw: number) =>
+      Math.max(0, Math.min(totalMinutesRef.current, Math.round(raw / 15) * 15));
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const rawMin = ((e.clientX - d.containerLeft) / PX_PER_HOUR) * 60;
+      setDrag({ ...d, currentMin: snapMin(rawMin) });
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const rawMin = ((e.clientX - d.containerLeft) / PX_PER_HOUR) * 60;
+      const snapped = snapMin(rawMin);
+      const startM = Math.min(d.startMin, snapped);
+      const endM = Math.max(d.startMin, snapped);
+      const finalEnd = endM <= startM ? startM + 60 : endM; // min 1 hour on single click
+
+      const mh = minHourRef.current;
+      const startDate = new Date(d.day);
+      startDate.setHours(mh + Math.floor(startM / 60), startM % 60, 0, 0);
+      const endDate = new Date(d.day);
+      endDate.setHours(mh + Math.floor(finalEnd / 60), finalEnd % 60, 0, 0);
+
+      setDrag(null);
+      router.push(
+        `/admin/events/new?start=${encodeURIComponent(startDate.toISOString())}&end=${encodeURIComponent(endDate.toISOString())}`
+      );
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging, router]);
+
+  function handleGridMouseDown(
+    e: React.MouseEvent<HTMLDivElement>,
+    dayIdx: number,
+    day: Date
+  ) {
+    // Only start drag on the empty grid background, not on child event links
+    if (e.target !== e.currentTarget) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rawMin = ((e.clientX - rect.left) / PX_PER_HOUR) * 60;
+    const snapped = Math.max(0, Math.min(totalMinutes, Math.round(rawMin / 15) * 15));
+    setDrag({ dayIdx, day, startMin: snapped, currentMin: snapped, containerLeft: rect.left });
+  }
+
+  const weekLabel = `${formatDateShort(days[0])} — ${formatDateShort(days[6])}`;
+
+  return (
+    <div>
+      {/* Week navigation */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => onNavigate(-1)}
+          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          aria-label="Předchozí týden"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-sm font-medium min-w-[160px] text-center">{weekLabel}</span>
+        <button
+          onClick={() => onNavigate(1)}
+          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          aria-label="Následující týden"
+        >
+          <ChevronRight size={16} />
+        </button>
+        <button
+          onClick={onGoToToday}
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          Dnes
+        </button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-[var(--color-primary)]" />
+        </div>
+      )}
+      {!loading && <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <div style={{ minWidth: DAY_LBL_W + gridWidth }}>
+          {/* Time header */}
+          <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
+            <div
+              className="flex-shrink-0 border-r border-gray-200"
+              style={{ width: DAY_LBL_W, height: 36 }}
+            />
+            <div className="relative" style={{ height: 36, width: gridWidth }}>
+              {hourMarks.map((h) => (
+                <div
+                  key={h}
+                  className="absolute top-0 bottom-0 flex items-center"
+                  style={{ left: (h - minHour) * PX_PER_HOUR }}
+                >
+                  <span className="text-[11px] font-semibold text-gray-500 pl-1 select-none">
+                    {String(h).padStart(2, "0")}:00
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Day rows */}
+          {days.map((day, dayIdx) => {
+            const isToday = isSameDay(day, today);
+            const isWeekend = dayIdx >= 5;
+            const dayEvents = events.filter((e) =>
+              isSameDay(new Date(e.startDatetime), day)
+            );
+            const { assignments, numTracks } = assignAdminTracks(dayEvents);
+            const rowHeight = Math.max(ROW_BASE_H, numTracks * TRACK_H + 8);
+            const trackH = (rowHeight - 8) / numTracks;
+
+            return (
+              <div
+                key={dayIdx}
+                className={`flex border-b last:border-b-0 border-gray-100 ${
+                  isWeekend ? "bg-gray-50/40" : "bg-white"
+                }`}
+              >
+                {/* Day label */}
+                <div
+                  className={`flex-shrink-0 border-r border-gray-200 flex flex-col items-center justify-center gap-0.5 ${
+                    isToday ? "bg-[var(--color-primary)]/10" : ""
+                  }`}
+                  style={{ width: DAY_LBL_W, height: rowHeight }}
+                >
+                  <span
+                    className={`text-[11px] font-semibold uppercase tracking-wide ${
+                      isToday ? "text-[var(--color-primary)]" : "text-gray-400"
+                    }`}
+                  >
+                    {CZECH_DAYS_SHORT[dayIdx]}
+                  </span>
+                  <span
+                    className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${
+                      isToday ? "bg-[var(--color-primary)] text-white" : "text-gray-800"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </span>
+                </div>
+
+                {/* Grid + events */}
+                <div
+                  className={`relative ${isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
+                  style={{ width: gridWidth, height: rowHeight }}
+                  onMouseDown={(e) => handleGridMouseDown(e, dayIdx, day)}
+                >
+                  {/* Hour lines */}
+                  {hourMarks.map((h) => (
+                    <div
+                      key={h}
+                      className="absolute top-0 bottom-0 border-l border-gray-200"
+                      style={{ left: (h - minHour) * PX_PER_HOUR }}
+                    />
+                  ))}
+                  {/* 15-min ticks */}
+                  {quarterOffsets.map((m) => (
+                    <div
+                      key={m}
+                      className="absolute top-0 bottom-0 border-l border-gray-100"
+                      style={{ left: toPixels(m) }}
+                    />
+                  ))}
+
+                  {/* Events */}
+                  {dayEvents.map((event) => {
+                    const s = new Date(event.startDatetime);
+                    const en = new Date(event.endDatetime);
+                    const startMin = Math.max(
+                      0,
+                      s.getHours() * 60 + s.getMinutes() - minHour * 60
+                    );
+                    const endMin = Math.min(
+                      totalMinutes,
+                      en.getHours() * 60 + en.getMinutes() - minHour * 60
+                    );
+                    const left = toPixels(startMin);
+                    const width = Math.max(toPixels(endMin - startMin), PX_PER_HOUR / 4);
+                    const track = assignments.get(event.id) ?? 0;
+                    const top = 4 + track * trackH;
+                    const height = trackH - 2;
+                    const color = event.category.color;
+
+                    return (
+                      <Link
+                        key={event.id}
+                        href={`/admin/events/${event.id}/edit`}
+                        title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
+                        className="absolute rounded overflow-hidden text-left hover:brightness-95 transition-all border-l-2 group"
+                        style={{
+                          left: left + 1,
+                          width: Math.max(width - 2, 4),
+                          top: top + 1,
+                          height: height - 2,
+                          borderLeftColor: color,
+                          backgroundColor: color + "22",
+                          opacity: event.status === "CANCELLED" ? 0.45 : 1,
+                        }}
+                      >
+                        {width >= 44 && (
+                          <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+                            <div
+                              className="text-[10px] font-semibold leading-tight truncate"
+                              style={{ color }}
+                            >
+                              {formatTime(s)}
+                            </div>
+                            <div className="text-[11px] font-medium leading-tight truncate text-gray-800">
+                              {event.title}
+                            </div>
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+
+                  {/* Drag-to-create selection rectangle */}
+                  {drag && drag.dayIdx === dayIdx && (
+                    <div
+                      className="absolute top-1 bottom-1 rounded pointer-events-none border border-blue-400 bg-blue-200/40"
+                      style={{
+                        left: toPixels(Math.min(drag.startMin, drag.currentMin)) + 1,
+                        width: Math.max(toPixels(Math.abs(drag.currentMin - drag.startMin)), 4),
+                      }}
+                    >
+                      <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold text-blue-700 pointer-events-none select-none">
+                        {drag.currentMin !== drag.startMin && (
+                          <>
+                            {String(minHour + Math.floor(Math.min(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                            :{String(Math.min(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                            {" – "}
+                            {String(minHour + Math.floor(Math.max(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                            :{String(Math.max(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>}
     </div>
   );
 }

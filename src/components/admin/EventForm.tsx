@@ -23,9 +23,11 @@ interface Props {
   event?: EventData;
   categories: EventCategory[];
   venues: Venue[];
+  defaultStart?: string; // ISO string — pre-fills start time for drag-to-create
+  defaultEnd?: string;   // ISO string
 }
 
-export default function EventForm({ event, categories, venues }: Props) {
+export default function EventForm({ event, categories, venues, defaultStart, defaultEnd }: Props) {
   const router = useRouter();
   const isEdit = !!event?.id;
 
@@ -42,8 +44,12 @@ export default function EventForm({ event, categories, venues }: Props) {
 
   const [title, setTitle] = useState(event?.title ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
-  const [startDt, setStartDt] = useState(event ? toLocalDatetime(event.startDatetime) : nowLocal());
-  const [endDt, setEndDt] = useState(event ? toLocalDatetime(event.endDatetime) : plusHour());
+  const [startDt, setStartDt] = useState(
+    event ? toLocalDatetime(event.startDatetime) : defaultStart ? toLocalDatetime(defaultStart) : nowLocal()
+  );
+  const [endDt, setEndDt] = useState(
+    event ? toLocalDatetime(event.endDatetime) : defaultEnd ? toLocalDatetime(defaultEnd) : plusHour()
+  );
   const [status, setStatus] = useState(event?.status ?? "CONFIRMED");
   const [categoryId, setCategoryId] = useState(event?.categoryId ?? categories[0]?.id ?? "");
   const [venueId, setVenueId] = useState(event?.venueId ?? defaultVenueId);
