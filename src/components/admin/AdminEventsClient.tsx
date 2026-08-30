@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { EventCategory, Venue } from "@prisma/client";
 import { formatTime, startOfWeek, addDays, isSameDay, CZECH_DAYS_SHORT, formatDateShort } from "@/lib/utils";
@@ -54,6 +54,34 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
   const [confirmDelete, setConfirmDelete] = useState<EventWithCategory | null>(null);
   const [adminView, setAdminView] = useState<"list" | "timetable">("list");
   const [timetableDate, setTimetableDate] = useState(new Date());
+  const [timetableEvents, setTimetableEvents] = useState<EventWithCategory[]>([]);
+  const [timetableLoading, setTimetableLoading] = useState(false);
+
+  const fetchTimetableEvents = useCallback(async (date: Date) => {
+    const weekStart = startOfWeek(date);
+    const weekEnd = addDays(weekStart, 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    setTimetableLoading(true);
+    try {
+      const params = new URLSearchParams({
+        from: weekStart.toISOString(),
+        to: weekEnd.toISOString(),
+      });
+      const res = await fetch(`/api/admin/events?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTimetableEvents(data);
+      }
+    } finally {
+      setTimetableLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (adminView === "timetable") {
+      fetchTimetableEvents(timetableDate);
+    }
+  }, [adminView, timetableDate, fetchTimetableEvents]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -231,7 +259,8 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
       {/* Timetable view */}
       {adminView === "timetable" && (
         <AdminTimetable
-          events={events}
+          events={timetableEvents}
+          loading={timetableLoading}
           timetableDate={timetableDate}
           onNavigate={(dir) => {
             const d = new Date(timetableDate);
@@ -297,12 +326,13 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
 
 interface AdminTimetableProps {
   events: EventWithCategory[];
+  loading: boolean;
   timetableDate: Date;
   onNavigate: (dir: 1 | -1) => void;
   onGoToToday: () => void;
 }
 
-function AdminTimetable({ events, timetableDate, onNavigate, onGoToToday }: AdminTimetableProps) {
+function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToday }: AdminTimetableProps) {
   const weekStart = startOfWeek(timetableDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const today = new Date();
@@ -368,7 +398,12 @@ function AdminTimetable({ events, timetableDate, onNavigate, onGoToToday }: Admi
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      {loading && (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-[var(--color-primary)]" />
+        </div>
+      )}
+      {!loading && <div className="overflow-x-auto rounded-xl border border-gray-200">
         <div style={{ minWidth: DAY_LBL_W + gridWidth }}>
           {/* Time header */}
           <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
@@ -507,7 +542,7 @@ function AdminTimetable({ events, timetableDate, onNavigate, onGoToToday }: Admi
             );
           })}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
