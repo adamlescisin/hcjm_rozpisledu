@@ -3,8 +3,13 @@ import { prisma } from "@/lib/prisma";
 import AdminNav from "@/components/admin/AdminNav";
 import EventForm from "@/components/admin/EventForm";
 
-export default async function NewEventPage() {
-  const [categories, venues] = await Promise.all([
+export default async function NewEventPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string; end?: string }>;
+}) {
+  const [{ start, end }, categories, venues] = await Promise.all([
+    searchParams,
     prisma.eventCategory.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -20,6 +25,8 @@ export default async function NewEventPage() {
         <EventForm
           categories={JSON.parse(JSON.stringify(categories))}
           venues={JSON.parse(JSON.stringify(venues))}
+          defaultStart={start}
+          defaultEnd={end}
         />
       </div>
     </div>

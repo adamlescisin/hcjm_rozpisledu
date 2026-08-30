@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EventCategory, Venue } from "@prisma/client";
 import { formatTime, startOfWeek, addDays, isSameDay, CZECH_DAYS_SHORT, formatDateShort } from "@/lib/utils";
@@ -333,6 +334,7 @@ interface AdminTimetableProps {
 }
 
 function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToday }: AdminTimetableProps) {
+  const router = useRouter();
   const weekStart = startOfWeek(timetableDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const today = new Date();
@@ -367,6 +369,83 @@ function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToda
 
   function toPixels(minutes: number) {
     return minutes * PX_PER_MIN;
+  }
+
+  // ── Drag-to-create ────────────────────────────────────────────────────────
+  interface DragState {
+    dayIdx: number;
+    day: Date;
+    startMin: number;
+    currentMin: number;
+    containerLeft: number;
+  }
+  const [drag, setDrag] = useState<DragState | null>(null);
+
+  // Stable refs so the global handlers don't go stale
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const minHourRef = useRef(minHour);
+  minHourRef.current = minHour;
+  const totalMinutesRef = useRef(totalMinutes);
+  totalMinutesRef.current = totalMinutes;
+
+  const isDragging = drag !== null;
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const snapMin = (raw: number) =>
+      Math.max(0, Math.min(totalMinutesRef.current, Math.round(raw / 15) * 15));
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const rawMin = ((e.clientX - d.containerLeft) / PX_PER_HOUR) * 60;
+      setDrag({ ...d, currentMin: snapMin(rawMin) });
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const rawMin = ((e.clientX - d.containerLeft) / PX_PER_HOUR) * 60;
+      const snapped = snapMin(rawMin);
+      const startM = Math.min(d.startMin, snapped);
+      const endM = Math.max(d.startMin, snapped);
+      const finalEnd = endM <= startM ? startM + 60 : endM; // min 1 hour on single click
+
+      const mh = minHourRef.current;
+      const startDate = new Date(d.day);
+      startDate.setHours(mh + Math.floor(startM / 60), startM % 60, 0, 0);
+      const endDate = new Date(d.day);
+      endDate.setHours(mh + Math.floor(finalEnd / 60), finalEnd % 60, 0, 0);
+
+      setDrag(null);
+      router.push(
+        `/admin/events/new?start=${encodeURIComponent(startDate.toISOString())}&end=${encodeURIComponent(endDate.toISOString())}`
+      );
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging, router]);
+
+  function handleGridMouseDown(
+    e: React.MouseEvent<HTMLDivElement>,
+    dayIdx: number,
+    day: Date
+  ) {
+    // Only start drag on the empty grid background, not on child event links
+    if (e.target !== e.currentTarget) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rawMin = ((e.clientX - rect.left) / PX_PER_HOUR) * 60;
+    const snapped = Math.max(0, Math.min(totalMinutes, Math.round(rawMin / 15) * 15));
+    setDrag({ dayIdx, day, startMin: snapped, currentMin: snapped, containerLeft: rect.left });
   }
 
   const weekLabel = `${formatDateShort(days[0])} — ${formatDateShort(days[6])}`;
@@ -468,7 +547,11 @@ function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToda
                 </div>
 
                 {/* Grid + events */}
-                <div className="relative" style={{ width: gridWidth, height: rowHeight }}>
+                <div
+                  className={`relative ${isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
+                  style={{ width: gridWidth, height: rowHeight }}
+                  onMouseDown={(e) => handleGridMouseDown(e, dayIdx, day)}
+                >
                   {/* Hour lines */}
                   {hourMarks.map((h) => (
                     <div
@@ -537,6 +620,29 @@ function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToda
                       </Link>
                     );
                   })}
+
+                  {/* Drag-to-create selection rectangle */}
+                  {drag && drag.dayIdx === dayIdx && (
+                    <div
+                      className="absolute top-1 bottom-1 rounded pointer-events-none border border-blue-400 bg-blue-200/40"
+                      style={{
+                        left: toPixels(Math.min(drag.startMin, drag.currentMin)) + 1,
+                        width: Math.max(toPixels(Math.abs(drag.currentMin - drag.startMin)), 4),
+                      }}
+                    >
+                      <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold text-blue-700 pointer-events-none select-none">
+                        {drag.currentMin !== drag.startMin && (
+                          <>
+                            {String(minHour + Math.floor(Math.min(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                            :{String(Math.min(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                            {" – "}
+                            {String(minHour + Math.floor(Math.max(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                            :{String(Math.max(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
