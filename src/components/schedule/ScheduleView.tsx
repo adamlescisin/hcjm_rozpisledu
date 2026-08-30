@@ -24,7 +24,7 @@ interface ScheduleViewProps {
 }
 
 export default function ScheduleView({ categories }: ScheduleViewProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [viewMode] = useState<ViewMode>("timetable");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<EventWithCategory[]>([]);
@@ -109,26 +109,9 @@ export default function ScheduleView({ categories }: ScheduleViewProps) {
   };
 
   return (
-    <div className={`p-4 mx-auto ${viewMode === "timetable" ? "max-w-7xl" : "max-w-5xl"}`}>
+    <div className="p-4 mx-auto max-w-7xl">
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        {/* View mode switcher */}
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-          {(["day", "week", "month", "timetable"] as ViewMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                viewMode === mode
-                  ? "bg-[var(--color-primary)] text-white"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {mode === "day" ? "Den" : mode === "week" ? "Týden" : mode === "month" ? "Měsíc" : "Rozvrh"}
-            </button>
-          ))}
-        </div>
-
         {/* Navigation */}
         <div className="flex items-center gap-2">
           <button

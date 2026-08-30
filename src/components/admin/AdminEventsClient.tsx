@@ -53,7 +53,7 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteScope, setDeleteScope] = useState<"this" | "future" | "all">("this");
   const [confirmDelete, setConfirmDelete] = useState<EventWithCategory | null>(null);
-  const [adminView, setAdminView] = useState<"list" | "timetable">("list");
+  const [adminView, setAdminView] = useState<"list" | "timetable">("timetable");
   const [timetableDate, setTimetableDate] = useState(new Date());
   const [timetableEvents, setTimetableEvents] = useState<EventWithCategory[]>([]);
   const [timetableLoading, setTimetableLoading] = useState(false);
