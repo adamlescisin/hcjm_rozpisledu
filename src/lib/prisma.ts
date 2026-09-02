@@ -8,6 +8,10 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL!,
+    // Serverless: 1 connection per invocation prevents exhausting pgBouncer session slots.
+    max: 1,
+    connectionTimeoutMillis: 8000,
+    idleTimeoutMillis: 5000,
   });
   return new PrismaClient({
     adapter,
