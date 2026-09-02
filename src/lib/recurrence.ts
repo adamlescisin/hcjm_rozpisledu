@@ -113,7 +113,7 @@ export async function generateRecurringEvents(
   }
 
   // Create all events in a single bulk insert
-  const { count } = await prisma.event.createMany({
+  const { count: createdCount } = await prisma.event.createMany({
     data: occurrenceDates.map((date, index) => ({
       venueId: eventBase.venueId,
       categoryId: eventBase.categoryId,
@@ -128,5 +128,5 @@ export async function generateRecurringEvents(
     })),
   });
 
-  return count;
+  return createdCount;
 }
