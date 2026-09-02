@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EventCategory, Venue } from "@prisma/client";
 import { formatTime, startOfWeek, addDays, isSameDay, CZECH_DAYS_SHORT, formatDateShort } from "@/lib/utils";
-import { Plus, Trash2, Edit2, AlertCircle, ChevronLeft, ChevronRight, LayoutList, CalendarDays } from "lucide-react";
+import { Plus, Trash2, Edit2, AlertCircle, ChevronLeft, ChevronRight, LayoutList, CalendarDays, Search, X } from "lucide-react";
 
 interface EventWithCategory {
   id: string;
@@ -19,7 +19,6 @@ interface EventWithCategory {
 }
 
 interface Props {
-  initialEvents: EventWithCategory[];
   categories: EventCategory[];
   venues: Venue[];
   isViewer?: boolean;
@@ -31,6 +30,7 @@ const PX_PER_MIN = PX_PER_HOUR / 60;
 const DAY_LBL_W = 88;
 const ROW_BASE_H = 56;
 const TRACK_H = 48;
+const PAGE_SIZE = 25;
 
 function assignAdminTracks(dayEvents: EventWithCategory[]) {
   const sorted = [...dayEvents].sort(
@@ -49,16 +49,67 @@ function assignAdminTracks(dayEvents: EventWithCategory[]) {
   return { assignments, numTracks: Math.max(1, trackEnds.length) };
 }
 
-export default function AdminEventsClient({ initialEvents, categories, venues, isViewer = false }: Props) {
-  const [events, setEvents] = useState(initialEvents);
+export default function AdminEventsClient({ categories, venues, isViewer = false }: Props) {
+  // ── List view state ────────────────────────────────────────────────────────
+  const [listEvents, setListEvents] = useState<EventWithCategory[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listLoading, setListLoading] = useState(false);
+  const [listPage, setListPage] = useState(1);
+
+  // Filter state
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // ── Delete / modal state ───────────────────────────────────────────────────
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteScope, setDeleteScope] = useState<"this" | "future" | "all">("this");
   const [confirmDelete, setConfirmDelete] = useState<EventWithCategory | null>(null);
+
+  // ── View state ─────────────────────────────────────────────────────────────
   const [adminView, setAdminView] = useState<"list" | "timetable">("timetable");
   const [timetableDate, setTimetableDate] = useState(new Date());
   const [timetableEvents, setTimetableEvents] = useState<EventWithCategory[]>([]);
   const [timetableLoading, setTimetableLoading] = useState(false);
 
+  // ── List fetch ─────────────────────────────────────────────────────────────
+  const fetchListEvents = useCallback(async (page: number) => {
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (search) params.set("search", search);
+      if (categoryFilter) params.set("categoryId", categoryFilter);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+
+      const res = await fetch(`/api/admin/events?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setListEvents(data.events);
+        setListTotal(data.total);
+      }
+    } finally {
+      setListLoading(false);
+    }
+  }, [search, categoryFilter, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (adminView === "list") {
+      fetchListEvents(listPage);
+    }
+  }, [adminView, listPage, fetchListEvents]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (adminView === "list") {
+      setListPage(1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, categoryFilter, dateFrom, dateTo]);
+
+  // ── Timetable fetch ────────────────────────────────────────────────────────
   const fetchTimetableEvents = useCallback(async (date: Date) => {
     const weekStart = startOfWeek(date);
     const weekEnd = addDays(weekStart, 6);
@@ -85,39 +136,24 @@ export default function AdminEventsClient({ initialEvents, categories, venues, i
     }
   }, [adminView, timetableDate, fetchTimetableEvents]);
 
+  // ── Delete handler ─────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!confirmDelete) return;
-    const params = confirmDelete.recurrenceRuleId
-      ? `?scope=${deleteScope}`
-      : "";
+    const params = confirmDelete.recurrenceRuleId ? `?scope=${deleteScope}` : "";
 
     setDeletingId(confirmDelete.id);
-    const res = await fetch(`/api/admin/events/${confirmDelete.id}${params}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(`/api/admin/events/${confirmDelete.id}${params}`, { method: "DELETE" });
 
     if (res.ok) {
-      if (deleteScope === "this" || !confirmDelete.recurrenceRuleId) {
-        setEvents((prev) => prev.filter((e) => e.id !== confirmDelete.id));
-      } else if (deleteScope === "all") {
-        setEvents((prev) =>
-          prev.filter((e) => e.recurrenceRuleId !== confirmDelete.recurrenceRuleId)
-        );
-      } else {
-        const cutoff = confirmDelete.startDatetime;
-        setEvents((prev) =>
-          prev.filter(
-            (e) =>
-              e.recurrenceRuleId !== confirmDelete.recurrenceRuleId ||
-              e.startDatetime < cutoff
-          )
-        );
-      }
+      // Refetch list to reflect deletion
+      fetchListEvents(listPage);
     }
 
     setDeletingId(null);
     setConfirmDelete(null);
   };
+
+  const totalPages = Math.max(1, Math.ceil(listTotal / PAGE_SIZE));
 
   const statusLabel: Record<string, string> = {
     CONFIRMED: "Potvrzen",
@@ -130,8 +166,19 @@ export default function AdminEventsClient({ initialEvents, categories, venues, i
     TENTATIVE: "bg-amber-50 text-amber-700",
   };
 
+  const hasActiveFilters = search || categoryFilter || dateFrom || dateTo;
+
+  const clearFilters = () => {
+    setSearch("");
+    setSearchInput("");
+    setCategoryFilter("");
+    setDateFrom("");
+    setDateTo("");
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-xl font-bold text-gray-900">Události</h1>
         <div className="flex items-center gap-2 flex-wrap">
@@ -179,90 +226,240 @@ export default function AdminEventsClient({ initialEvents, categories, venues, i
         </div>
       )}
 
-      {adminView === "list" && <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Název</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategorie</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Datum a čas</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stav</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {events.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center py-10 text-gray-400">
-                    Žádné události. Vytvořte první!
-                  </td>
-                </tr>
-              )}
-              {events.map((event) => (
-                <tr key={event.id} className={`hover:bg-gray-50 ${event.status === "CANCELLED" ? "opacity-50" : ""}`}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: event.category.color }}
-                      />
-                      <span className="font-medium text-gray-900">{event.title}</span>
-                      {event.recurrenceRuleId && (
-                        <span className="text-xs text-gray-400">↻</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{
-                        backgroundColor: event.category.color + "20",
-                        color: event.category.color,
-                      }}
-                    >
-                      {event.category.name}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {new Date(event.startDatetime).toLocaleDateString("cs-CZ", {
-                      weekday: "short", day: "numeric", month: "short",
-                      timeZone: "Europe/Prague",
-                    })}{" "}
-                    {formatTime(new Date(event.startDatetime))}–{formatTime(new Date(event.endDatetime))}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[event.status]}`}>
-                      {statusLabel[event.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {!isViewer && (
-                      <div className="flex items-center gap-1 justify-end">
-                        <Link
-                          href={`/admin/events/${event.id}/edit`}
-                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Edit2 size={15} />
-                        </Link>
-                        <button
-                          onClick={() => { setConfirmDelete(event); setDeleteScope("this"); }}
-                          disabled={deletingId === event.id}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>}
+      {/* ── List view ─────────────────────────────────────────────────────── */}
+      {adminView === "list" && (
+        <>
+          {/* Filter bar */}
+          <div className="bg-white rounded-xl border p-3 mb-3 flex flex-wrap gap-2 items-end">
+            {/* Search */}
+            <div className="flex-1 min-w-[180px]">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Název</label>
+              <form
+                onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); }}
+                className="flex"
+              >
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Hledat…"
+                    className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="ml-1 px-3 py-1.5 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90"
+                >
+                  Hledat
+                </button>
+              </form>
+            </div>
 
-      {/* Timetable view */}
+            {/* Category */}
+            <div className="min-w-[160px]">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Kategorie</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              >
+                <option value="">Všechny</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date from */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Datum od</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+
+            {/* Date to */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Datum do</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+
+            {/* Clear */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors self-end"
+              >
+                <X size={13} />
+                Zrušit filtry
+              </button>
+            )}
+          </div>
+
+          {/* Result count */}
+          <div className="text-xs text-gray-400 mb-2 px-1">
+            {listLoading ? "Načítám…" : `${listTotal} ${listTotal === 1 ? "událost" : listTotal < 5 ? "události" : "událostí"}`}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Název</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategorie</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Datum a čas</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stav</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {listLoading && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10">
+                        <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-t-[var(--color-primary)]" />
+                      </td>
+                    </tr>
+                  )}
+                  {!listLoading && listEvents.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 text-gray-400">
+                        {hasActiveFilters ? "Žádné výsledky pro zadané filtry." : "Žádné události."}
+                      </td>
+                    </tr>
+                  )}
+                  {!listLoading && listEvents.map((event) => (
+                    <tr key={event.id} className={`hover:bg-gray-50 ${event.status === "CANCELLED" ? "opacity-50" : ""}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: event.category.color }}
+                          />
+                          <span className="font-medium text-gray-900">{event.title}</span>
+                          {event.recurrenceRuleId && (
+                            <span className="text-xs text-gray-400">↻</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full font-medium"
+                          style={{
+                            backgroundColor: event.category.color + "20",
+                            color: event.category.color,
+                          }}
+                        >
+                          {event.category.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {new Date(event.startDatetime).toLocaleDateString("cs-CZ", {
+                          weekday: "short", day: "numeric", month: "short",
+                          timeZone: "Europe/Prague",
+                        })}{" "}
+                        {formatTime(new Date(event.startDatetime))}–{formatTime(new Date(event.endDatetime))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[event.status]}`}>
+                          {statusLabel[event.status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {!isViewer && (
+                          <div className="flex items-center gap-1 justify-end">
+                            <Link
+                              href={`/admin/events/${event.id}/edit`}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={15} />
+                            </Link>
+                            <button
+                              onClick={() => { setConfirmDelete(event); setDeleteScope("this"); }}
+                              disabled={deletingId === event.id}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                <span className="text-xs text-gray-500">
+                  Strana {listPage} z {totalPages}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                    disabled={listPage === 1 || listLoading}
+                    className="p-1.5 rounded-lg border border-gray-200 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Předchozí strana"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+
+                  {/* Page numbers */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - listPage) <= 2)
+                    .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((item, i) =>
+                      item === "…" ? (
+                        <span key={`ellipsis-${i}`} className="px-1 text-gray-400 text-sm">…</span>
+                      ) : (
+                        <button
+                          key={item}
+                          onClick={() => setListPage(item as number)}
+                          disabled={listLoading}
+                          className={`w-8 h-8 text-sm rounded-lg border transition-colors disabled:opacity-40 ${
+                            item === listPage
+                              ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                              : "border-gray-200 hover:bg-white"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      )
+                    )}
+
+                  <button
+                    onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={listPage === totalPages || listLoading}
+                    className="p-1.5 rounded-lg border border-gray-200 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Následující strana"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Timetable view ─────────────────────────────────────────────────── */}
       {adminView === "timetable" && (
         <AdminTimetable
           events={timetableEvents}
@@ -350,7 +547,6 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
     days.some((d) => isSameDay(new Date(e.startDatetime), d))
   );
 
-  // Derive time range from this week's events, fallback 08:00–22:00
   let minHour = 8;
   let maxHour = 22;
   if (weekEvents.length > 0) {
@@ -378,7 +574,6 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
     return minutes * PX_PER_MIN;
   }
 
-  // ── Drag-to-create ────────────────────────────────────────────────────────
   interface DragState {
     dayIdx: number;
     day: Date;
@@ -388,7 +583,6 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
   }
   const [drag, setDrag] = useState<DragState | null>(null);
 
-  // Stable refs so the global handlers don't go stale
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
   const minHourRef = useRef(minHour);
@@ -418,7 +612,7 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
       const snapped = snapMin(rawMin);
       const startM = Math.min(d.startMin, snapped);
       const endM = Math.max(d.startMin, snapped);
-      const finalEnd = endM <= startM ? startM + 60 : endM; // min 1 hour on single click
+      const finalEnd = endM <= startM ? startM + 60 : endM;
 
       const mh = minHourRef.current;
       const startDate = new Date(d.day);
@@ -441,12 +635,7 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging, router]);
 
-  function handleGridMouseDown(
-    e: React.MouseEvent<HTMLDivElement>,
-    dayIdx: number,
-    day: Date
-  ) {
-    // Only start drag on the empty grid background, not on child event links
+  function handleGridMouseDown(e: React.MouseEvent<HTMLDivElement>, dayIdx: number, day: Date) {
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -459,7 +648,6 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
 
   return (
     <div>
-      {/* Week navigation */}
       <div className="flex items-center gap-2 mb-3">
         <button
           onClick={() => onNavigate(-1)}
@@ -489,181 +677,148 @@ function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, 
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-[var(--color-primary)]" />
         </div>
       )}
-      {!loading && <div className="overflow-x-auto rounded-xl border border-gray-200">
-        <div style={{ minWidth: DAY_LBL_W + gridWidth }}>
-          {/* Time header */}
-          <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
-            <div
-              className="flex-shrink-0 border-r border-gray-200"
-              style={{ width: DAY_LBL_W, height: 36 }}
-            />
-            <div className="relative" style={{ height: 36, width: gridWidth }}>
-              {hourMarks.map((h) => (
-                <div
-                  key={h}
-                  className="absolute top-0 bottom-0 flex items-center"
-                  style={{ left: (h - minHour) * PX_PER_HOUR }}
-                >
-                  <span className="text-[11px] font-semibold text-gray-500 pl-1 select-none">
-                    {String(h).padStart(2, "0")}:00
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Day rows */}
-          {days.map((day, dayIdx) => {
-            const isToday = isSameDay(day, today);
-            const isWeekend = dayIdx >= 5;
-            const dayEvents = events.filter((e) =>
-              isSameDay(new Date(e.startDatetime), day)
-            );
-            const { assignments, numTracks } = assignAdminTracks(dayEvents);
-            const rowHeight = Math.max(ROW_BASE_H, numTracks * TRACK_H + 8);
-            const trackH = (rowHeight - 8) / numTracks;
-
-            return (
-              <div
-                key={dayIdx}
-                className={`flex border-b last:border-b-0 border-gray-100 ${
-                  isWeekend ? "bg-gray-50/40" : "bg-white"
-                }`}
-              >
-                {/* Day label */}
-                <div
-                  className={`flex-shrink-0 border-r border-gray-200 flex flex-col items-center justify-center gap-0.5 ${
-                    isToday ? "bg-[var(--color-primary)]/10" : ""
-                  }`}
-                  style={{ width: DAY_LBL_W, height: rowHeight }}
-                >
-                  <span
-                    className={`text-[11px] font-semibold uppercase tracking-wide ${
-                      isToday ? "text-[var(--color-primary)]" : "text-gray-400"
-                    }`}
+      {!loading && (
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <div style={{ minWidth: DAY_LBL_W + gridWidth }}>
+            {/* Time header */}
+            <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
+              <div className="flex-shrink-0 border-r border-gray-200" style={{ width: DAY_LBL_W, height: 36 }} />
+              <div className="relative" style={{ height: 36, width: gridWidth }}>
+                {hourMarks.map((h) => (
+                  <div
+                    key={h}
+                    className="absolute top-0 bottom-0 flex items-center"
+                    style={{ left: (h - minHour) * PX_PER_HOUR }}
                   >
-                    {CZECH_DAYS_SHORT[dayIdx]}
-                  </span>
-                  <span
-                    className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${
-                      isToday ? "bg-[var(--color-primary)] text-white" : "text-gray-800"
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                </div>
-
-                {/* Grid + events */}
-                <div
-                  className={`relative ${isViewer ? "" : isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
-                  style={{ width: gridWidth, height: rowHeight }}
-                  onMouseDown={isViewer ? undefined : (e) => handleGridMouseDown(e, dayIdx, day)}
-                >
-                  {/* Hour lines */}
-                  {hourMarks.map((h) => (
-                    <div
-                      key={h}
-                      className="absolute top-0 bottom-0 border-l border-gray-200"
-                      style={{ left: (h - minHour) * PX_PER_HOUR }}
-                    />
-                  ))}
-                  {/* 15-min ticks */}
-                  {quarterOffsets.map((m) => (
-                    <div
-                      key={m}
-                      className="absolute top-0 bottom-0 border-l border-gray-100"
-                      style={{ left: toPixels(m) }}
-                    />
-                  ))}
-
-                  {/* Events */}
-                  {dayEvents.map((event) => {
-                    const s = new Date(event.startDatetime);
-                    const en = new Date(event.endDatetime);
-                    const startMin = Math.max(
-                      0,
-                      s.getHours() * 60 + s.getMinutes() - minHour * 60
-                    );
-                    const endMin = Math.min(
-                      totalMinutes,
-                      en.getHours() * 60 + en.getMinutes() - minHour * 60
-                    );
-                    const left = toPixels(startMin);
-                    const width = Math.max(toPixels(endMin - startMin), PX_PER_HOUR / 4);
-                    const track = assignments.get(event.id) ?? 0;
-                    const top = 4 + track * trackH;
-                    const height = trackH - 2;
-                    const color = event.category.color;
-
-                    const chipContent = (
-                      <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
-                        <div className="text-[10px] font-semibold leading-tight truncate" style={{ color }}>
-                          {formatTime(s)}
-                        </div>
-                        <div className="text-[11px] font-medium leading-tight truncate text-gray-800">
-                          {event.title}
-                        </div>
-                      </div>
-                    );
-                    const chipStyle = {
-                      left: left + 1,
-                      width: Math.max(width - 2, 4),
-                      top: top + 1,
-                      height: height - 2,
-                      borderLeftColor: color,
-                      backgroundColor: color + "22",
-                      opacity: event.status === "CANCELLED" ? 0.45 : 1,
-                    };
-                    return isViewer ? (
-                      <div
-                        key={event.id}
-                        title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
-                        className="absolute rounded overflow-hidden text-left border-l-2"
-                        style={chipStyle}
-                      >
-                        {width >= 44 && chipContent}
-                      </div>
-                    ) : (
-                      <Link
-                        key={event.id}
-                        href={`/admin/events/${event.id}/edit`}
-                        title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
-                        className="absolute rounded overflow-hidden text-left hover:brightness-95 transition-all border-l-2 group"
-                        style={chipStyle}
-                      >
-                        {width >= 44 && chipContent}
-                      </Link>
-                    );
-                  })}
-
-                  {/* Drag-to-create selection rectangle */}
-                  {!isViewer && drag && drag.dayIdx === dayIdx && (
-                    <div
-                      className="absolute top-1 bottom-1 rounded pointer-events-none border border-blue-400 bg-blue-200/40"
-                      style={{
-                        left: toPixels(Math.min(drag.startMin, drag.currentMin)) + 1,
-                        width: Math.max(toPixels(Math.abs(drag.currentMin - drag.startMin)), 4),
-                      }}
-                    >
-                      <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold text-blue-700 pointer-events-none select-none">
-                        {drag.currentMin !== drag.startMin && (
-                          <>
-                            {String(minHour + Math.floor(Math.min(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
-                            :{String(Math.min(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
-                            {" – "}
-                            {String(minHour + Math.floor(Math.max(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
-                            :{String(Math.max(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                    <span className="text-[11px] font-semibold text-gray-500 pl-1 select-none">
+                      {String(h).padStart(2, "0")}:00
+                    </span>
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+
+            {/* Day rows */}
+            {days.map((day, dayIdx) => {
+              const isToday = isSameDay(day, today);
+              const isWeekend = dayIdx >= 5;
+              const dayEvents = events.filter((e) => isSameDay(new Date(e.startDatetime), day));
+              const { assignments, numTracks } = assignAdminTracks(dayEvents);
+              const rowHeight = Math.max(ROW_BASE_H, numTracks * TRACK_H + 8);
+              const trackH = (rowHeight - 8) / numTracks;
+
+              return (
+                <div
+                  key={dayIdx}
+                  className={`flex border-b last:border-b-0 border-gray-100 ${isWeekend ? "bg-gray-50/40" : "bg-white"}`}
+                >
+                  {/* Day label */}
+                  <div
+                    className={`flex-shrink-0 border-r border-gray-200 flex flex-col items-center justify-center gap-0.5 ${
+                      isToday ? "bg-[var(--color-primary)]/10" : ""
+                    }`}
+                    style={{ width: DAY_LBL_W, height: rowHeight }}
+                  >
+                    <span className={`text-[11px] font-semibold uppercase tracking-wide ${isToday ? "text-[var(--color-primary)]" : "text-gray-400"}`}>
+                      {CZECH_DAYS_SHORT[dayIdx]}
+                    </span>
+                    <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? "bg-[var(--color-primary)] text-white" : "text-gray-800"}`}>
+                      {day.getDate()}
+                    </span>
+                  </div>
+
+                  {/* Grid + events */}
+                  <div
+                    className={`relative ${isViewer ? "" : isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
+                    style={{ width: gridWidth, height: rowHeight }}
+                    onMouseDown={isViewer ? undefined : (e) => handleGridMouseDown(e, dayIdx, day)}
+                  >
+                    {hourMarks.map((h) => (
+                      <div key={h} className="absolute top-0 bottom-0 border-l border-gray-200" style={{ left: (h - minHour) * PX_PER_HOUR }} />
+                    ))}
+                    {quarterOffsets.map((m) => (
+                      <div key={m} className="absolute top-0 bottom-0 border-l border-gray-100" style={{ left: toPixels(m) }} />
+                    ))}
+
+                    {dayEvents.map((event) => {
+                      const s = new Date(event.startDatetime);
+                      const en = new Date(event.endDatetime);
+                      const startMin = Math.max(0, s.getHours() * 60 + s.getMinutes() - minHour * 60);
+                      const endMin = Math.min(totalMinutes, en.getHours() * 60 + en.getMinutes() - minHour * 60);
+                      const left = toPixels(startMin);
+                      const width = Math.max(toPixels(endMin - startMin), PX_PER_HOUR / 4);
+                      const track = assignments.get(event.id) ?? 0;
+                      const top = 4 + track * trackH;
+                      const height = trackH - 2;
+                      const color = event.category.color;
+
+                      const chipContent = width >= 44 ? (
+                        <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+                          <div className="text-[10px] font-semibold leading-tight truncate" style={{ color }}>{formatTime(s)}</div>
+                          <div className="text-[11px] font-medium leading-tight truncate text-gray-800">{event.title}</div>
+                        </div>
+                      ) : null;
+
+                      const chipStyle = {
+                        left: left + 1,
+                        width: Math.max(width - 2, 4),
+                        top: top + 1,
+                        height: height - 2,
+                        borderLeftColor: color,
+                        backgroundColor: color + "22",
+                        opacity: event.status === "CANCELLED" ? 0.45 : 1,
+                      };
+
+                      return isViewer ? (
+                        <div
+                          key={event.id}
+                          title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
+                          className="absolute rounded overflow-hidden text-left border-l-2"
+                          style={chipStyle}
+                        >
+                          {chipContent}
+                        </div>
+                      ) : (
+                        <Link
+                          key={event.id}
+                          href={`/admin/events/${event.id}/edit`}
+                          title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
+                          className="absolute rounded overflow-hidden text-left hover:brightness-95 transition-all border-l-2 group"
+                          style={chipStyle}
+                        >
+                          {chipContent}
+                        </Link>
+                      );
+                    })}
+
+                    {!isViewer && drag && drag.dayIdx === dayIdx && (
+                      <div
+                        className="absolute top-1 bottom-1 rounded pointer-events-none border border-blue-400 bg-blue-200/40"
+                        style={{
+                          left: toPixels(Math.min(drag.startMin, drag.currentMin)) + 1,
+                          width: Math.max(toPixels(Math.abs(drag.currentMin - drag.startMin)), 4),
+                        }}
+                      >
+                        <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold text-blue-700 pointer-events-none select-none">
+                          {drag.currentMin !== drag.startMin && (
+                            <>
+                              {String(minHour + Math.floor(Math.min(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                              :{String(Math.min(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                              {" – "}
+                              {String(minHour + Math.floor(Math.max(drag.startMin, drag.currentMin) / 60)).padStart(2, "0")}
+                              :{String(Math.max(drag.startMin, drag.currentMin) % 60).padStart(2, "0")}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>}
+      )}
     </div>
   );
 }
