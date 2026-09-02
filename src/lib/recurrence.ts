@@ -92,18 +92,28 @@ export async function generateRecurringEvents(
     }
   }
 
-  // Check for conflicts in batch
-  const conflictsCheck = await prisma.event.findMany({
+  // Check for conflicts: single range query covering the whole series, then filter in memory.
+  // This avoids an OR clause with one condition per occurrence (up to 365 clauses).
+  const seriesStart = occurrenceDates[0];
+  const seriesEnd = new Date(occurrenceDates[occurrenceDates.length - 1].getTime() + duration);
+
+  const candidateConflicts = await prisma.event.findMany({
     where: {
       venueId: eventBase.venueId,
       status: { not: "CANCELLED" },
-      OR: occurrenceDates.map((date) => ({
-        startDatetime: { lt: new Date(date.getTime() + duration) },
-        endDatetime: { gt: date },
-      })),
+      startDatetime: { lt: seriesEnd },
+      endDatetime: { gt: seriesStart },
     },
     select: { startDatetime: true, endDatetime: true, title: true },
   });
+
+  const conflictsCheck = candidateConflicts.filter((existing) =>
+    occurrenceDates.some(
+      (date) =>
+        existing.startDatetime < new Date(date.getTime() + duration) &&
+        existing.endDatetime > date
+    )
+  );
 
   if (conflictsCheck.length > 0) {
     await prisma.recurrenceRule.delete({ where: { id: rule.id } });
