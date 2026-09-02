@@ -2,10 +2,40 @@ import { prisma } from "@/lib/prisma";
 import { RecurrenceEventFormData } from "@/lib/validations";
 import { RecurrenceFrequency } from "@prisma/client";
 
+// All date arithmetic must be done in local Prague time so that the wall-clock
+// time of recurring events (e.g. 18:00) stays the same even across DST changes.
+// Vercel runs in UTC, so raw Date.setDate / setMonth would shift events by ±1 h.
+const VENUE_TZ = "Europe/Prague";
+
+type LocalParts = { y: number; mo: number; d: number; h: number; mi: number; s: number };
+
+function getLocalParts(date: Date): LocalParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: VENUE_TZ,
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric", second: "numeric",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const h = get("hour");
+  return { y: get("year"), mo: get("month") - 1, d: get("day"), h: h === 24 ? 0 : h, mi: get("minute"), s: get("second") };
+}
+
+// Convert local date/time components back to a UTC Date.
+// Estimates the UTC offset by comparing a trial UTC timestamp to its local representation.
+function localPartsToUtc({ y, mo, d, h, mi, s }: LocalParts): Date {
+  const trial = new Date(Date.UTC(y, mo, d, h, mi, s));
+  const loc = getLocalParts(trial);
+  const locAsUtc = new Date(Date.UTC(loc.y, loc.mo, loc.d, loc.h, loc.mi, loc.s));
+  const offset = trial.getTime() - locAsUtc.getTime();
+  return new Date(Date.UTC(y, mo, d, h, mi, s) + offset);
+}
+
 function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+  const p = getLocalParts(date);
+  // Advance only the day component so wall-clock time is unchanged.
+  const shifted = new Date(Date.UTC(p.y, p.mo, p.d + days));
+  return localPartsToUtc({ ...p, y: shifted.getUTCFullYear(), mo: shifted.getUTCMonth(), d: shifted.getUTCDate() });
 }
 
 function addWeeks(date: Date, weeks: number): Date {
@@ -13,17 +43,15 @@ function addWeeks(date: Date, weeks: number): Date {
 }
 
 function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
+  const p = getLocalParts(date);
+  const shifted = new Date(Date.UTC(p.y, p.mo + months, p.d));
+  return localPartsToUtc({ ...p, y: shifted.getUTCFullYear(), mo: shifted.getUTCMonth(), d: shifted.getUTCDate() });
 }
 
 function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  const pa = getLocalParts(a);
+  const pb = getLocalParts(b);
+  return pa.y === pb.y && pa.mo === pb.mo && pa.d === pb.d;
 }
 
 export async function generateRecurringEvents(
