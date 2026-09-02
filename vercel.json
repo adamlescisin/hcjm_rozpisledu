@@ -1,5 +1,4 @@
 {
-  "buildCommand": "prisma db execute --file ./prisma/migrations/20260816120000_add_ice_resurfacing_mode/migration.sql && prisma db execute --file ./prisma/migrations/20260902120000_add_schedule_weeks_ahead/migration.sql && next build",
   "functions": {
     "src/app/api/**": {
       "maxDuration": 30
