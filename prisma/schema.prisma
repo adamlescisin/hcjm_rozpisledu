@@ -129,6 +129,7 @@ model ThemeSettings {
   fontHeading    String  @default("Inter") @map("font_heading")
   fontBody       String  @default("Inter") @map("font_body")
   logoUrl        String? @map("logo_url")
+  scheduleWeeksAhead Int @default(4) @map("schedule_weeks_ahead")
 
   createdAt DateTime @default(now()) @map("created_at")
 updatedAt DateTime @updatedAt      @map("updated_at")

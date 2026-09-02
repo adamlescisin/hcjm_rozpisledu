@@ -11,6 +11,7 @@ interface Theme {
   fontHeading: string;
   fontBody: string;
   logoUrl: string | null;
+  scheduleWeeksAhead: number;
 }
 
 const DEFAULTS: Theme = {
@@ -20,6 +21,7 @@ const DEFAULTS: Theme = {
   fontHeading: "Inter",
   fontBody: "Inter",
   logoUrl: null,
+  scheduleWeeksAhead: 4,
 };
 
 const FONTS = ["Inter", "Roboto", "Open Sans", "Poppins", "Montserrat", "Lato"];
@@ -180,6 +182,32 @@ export default function AdminThemeClient({ theme }: Props) {
                 ))}
               </select>
             </div>
+          </div>
+        </div>
+
+        {/* Schedule horizon */}
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">Zobrazení rozvrhu</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Počet týdnů k zobrazení na webu
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Web zobrazí historii, aktuální týden a zadaný počet dalších týdnů dopředu.
+            </p>
+            <input
+              type="number"
+              min={1}
+              max={52}
+              value={form.scheduleWeeksAhead}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  scheduleWeeksAhead: Math.max(1, Math.min(52, parseInt(e.target.value) || 1)),
+                }))
+              }
+              className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
           </div>
         </div>
 

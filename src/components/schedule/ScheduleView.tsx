@@ -21,9 +21,10 @@ interface EventWithCategory {
 
 interface ScheduleViewProps {
   categories: EventCategory[];
+  scheduleWeeksAhead: number;
 }
 
-export default function ScheduleView({ categories }: ScheduleViewProps) {
+export default function ScheduleView({ categories, scheduleWeeksAhead }: ScheduleViewProps) {
   const [viewMode] = useState<ViewMode>("timetable");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
@@ -74,7 +75,12 @@ export default function ScheduleView({ categories }: ScheduleViewProps) {
     fetchEvents();
   }, [fetchEvents]);
 
+  // Max week the user can navigate to: startOfWeek(today) + (scheduleWeeksAhead - 1) weeks
+  const maxWeekStart = addDays(startOfWeek(new Date()), (scheduleWeeksAhead - 1) * 7);
+  const isAtMax = startOfWeek(currentDate) >= maxWeekStart;
+
   const navigate = (direction: 1 | -1) => {
+    if (direction === 1 && isAtMax) return;
     const d = new Date(currentDate);
     if (viewMode === "day") d.setDate(d.getDate() + direction);
     else if (viewMode === "week" || viewMode === "timetable") d.setDate(d.getDate() + 7 * direction);
@@ -113,7 +119,7 @@ export default function ScheduleView({ categories }: ScheduleViewProps) {
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         {/* Navigation */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => navigate(-1)}
             className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
@@ -126,7 +132,8 @@ export default function ScheduleView({ categories }: ScheduleViewProps) {
           </span>
           <button
             onClick={() => navigate(1)}
-            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            disabled={isAtMax}
+            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Následující"
           >
             <ChevronRight size={16} />
@@ -138,6 +145,9 @@ export default function ScheduleView({ categories }: ScheduleViewProps) {
             <Calendar size={14} />
             Dnes
           </button>
+          <span className="text-xs text-gray-400 italic">
+            Zobrazuji jen {scheduleWeeksAhead} {scheduleWeeksAhead === 1 ? "týden" : scheduleWeeksAhead < 5 ? "týdny" : "týdnů"} dopředu
+          </span>
         </div>
       </div>
 

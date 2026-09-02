@@ -36,7 +36,7 @@ export default async function HomePage() {
             <p className="text-sm opacity-80">HC Junior Mělník — ZS Mělník</p>
           </div>
         </header>
-        <ScheduleView categories={categories} />
+        <ScheduleView categories={categories} scheduleWeeksAhead={theme?.scheduleWeeksAhead ?? 4} />
       </main>
     </>
   );

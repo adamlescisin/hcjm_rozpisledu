@@ -79,6 +79,7 @@ export const themeSchema = z.object({
   fontHeading: z.string().min(1),
   fontBody: z.string().min(1),
   logoUrl: z.string().url().optional().nullable(),
+  scheduleWeeksAhead: z.number().int().min(1).max(52).default(4),
 });
 
 export type CategoryFormData = z.infer<typeof categorySchema>;
