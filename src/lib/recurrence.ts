@@ -29,7 +29,7 @@ function isSameDay(a: Date, b: Date): boolean {
 export async function generateRecurringEvents(
   data: RecurrenceEventFormData,
   userId: string
-): Promise<{ id: string }[]> {
+): Promise<number> {
   const { recurrence, ...eventBase } = data;
 
   const startDt = new Date(eventBase.startDatetime);
@@ -112,26 +112,21 @@ export async function generateRecurringEvents(
     );
   }
 
-  // Create all events
-  const created = await prisma.$transaction(
-    occurrenceDates.map((date, index) =>
-      prisma.event.create({
-        data: {
-          venueId: eventBase.venueId,
-          categoryId: eventBase.categoryId,
-          title: eventBase.title,
-          description: eventBase.description ?? null,
-          startDatetime: date,
-          endDatetime: new Date(date.getTime() + duration),
-          status: eventBase.status,
-          recurrenceRuleId: rule.id,
-          recurrenceIndex: index,
-          createdBy: userId,
-        },
-        select: { id: true },
-      })
-    )
-  );
+  // Create all events in a single bulk insert
+  const { count } = await prisma.event.createMany({
+    data: occurrenceDates.map((date, index) => ({
+      venueId: eventBase.venueId,
+      categoryId: eventBase.categoryId,
+      title: eventBase.title,
+      description: eventBase.description ?? null,
+      startDatetime: date,
+      endDatetime: new Date(date.getTime() + duration),
+      status: eventBase.status,
+      recurrenceRuleId: rule.id,
+      recurrenceIndex: index,
+      createdBy: userId,
+    })),
+  });
 
-  return created;
+  return count;
 }

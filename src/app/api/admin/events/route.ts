@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
     // Check if creating a recurring event
     if (body.recurrence) {
       const data = recurrenceEventSchema.parse(body);
-      const events = await generateRecurringEvents(data, user.id);
-      return NextResponse.json({ created: events.length, events });
+      const count = await generateRecurringEvents(data, user.id);
+      return NextResponse.json({ created: count });
     }
 
     const data = eventSchema.parse(body);
