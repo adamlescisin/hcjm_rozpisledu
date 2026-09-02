@@ -18,6 +18,7 @@ const PRESET_COLORS = [
 
 interface Props {
   categories: EventCategory[];
+  isViewer?: boolean;
 }
 
 const emptyForm = {
@@ -32,7 +33,7 @@ const emptyForm = {
   sortOrder: 0,
 };
 
-export default function AdminCategoriesClient({ categories: initial }: Props) {
+export default function AdminCategoriesClient({ categories: initial, isViewer = false }: Props) {
   const [categories, setCategories] = useState(initial);
   const [editId, setEditId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -101,13 +102,15 @@ export default function AdminCategoriesClient({ categories: initial }: Props) {
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Kategorie</h1>
-        <button
-          onClick={() => { setShowAdd(true); setEditId(null); setForm(emptyForm); }}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus size={16} />
-          Nová kategorie
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => { setShowAdd(true); setEditId(null); setForm(emptyForm); }}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus size={16} />
+            Nová kategorie
+          </button>
+        )}
       </div>
 
       {showAdd && (
@@ -165,20 +168,22 @@ export default function AdminCategoriesClient({ categories: initial }: Props) {
                     {cat.requiresIceResurfacingAfter && ` · ${cat.resurfacingDurationMinutes} min po`}
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => startEdit(cat)}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(cat.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => startEdit(cat)}
+                      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(cat.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

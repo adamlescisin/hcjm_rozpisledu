@@ -22,6 +22,7 @@ interface Props {
   initialEvents: EventWithCategory[];
   categories: EventCategory[];
   venues: Venue[];
+  isViewer?: boolean;
 }
 
 // ─── Timetable constants ──────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ function assignAdminTracks(dayEvents: EventWithCategory[]) {
   return { assignments, numTracks: Math.max(1, trackEnds.length) };
 }
 
-export default function AdminEventsClient({ initialEvents, categories, venues }: Props) {
+export default function AdminEventsClient({ initialEvents, categories, venues, isViewer = false }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteScope, setDeleteScope] = useState<"this" | "future" | "all">("this");
@@ -159,13 +160,15 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
               Rozvrh
             </button>
           </div>
-          <Link
-            href="/admin/events/new"
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus size={16} />
-            Nová událost
-          </Link>
+          {!isViewer && (
+            <Link
+              href="/admin/events/new"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus size={16} />
+              Nová událost
+            </Link>
+          )}
         </div>
       </div>
 
@@ -234,21 +237,23 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Link
-                        href={`/admin/events/${event.id}/edit`}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Edit2 size={15} />
-                      </Link>
-                      <button
-                        onClick={() => { setConfirmDelete(event); setDeleteScope("this"); }}
-                        disabled={deletingId === event.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                    {!isViewer && (
+                      <div className="flex items-center gap-1 justify-end">
+                        <Link
+                          href={`/admin/events/${event.id}/edit`}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Edit2 size={15} />
+                        </Link>
+                        <button
+                          onClick={() => { setConfirmDelete(event); setDeleteScope("this"); }}
+                          disabled={deletingId === event.id}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -263,6 +268,7 @@ export default function AdminEventsClient({ initialEvents, categories, venues }:
           events={timetableEvents}
           loading={timetableLoading}
           timetableDate={timetableDate}
+          isViewer={isViewer}
           onNavigate={(dir) => {
             const d = new Date(timetableDate);
             d.setDate(d.getDate() + 7 * dir);
@@ -329,11 +335,12 @@ interface AdminTimetableProps {
   events: EventWithCategory[];
   loading: boolean;
   timetableDate: Date;
+  isViewer: boolean;
   onNavigate: (dir: 1 | -1) => void;
   onGoToToday: () => void;
 }
 
-function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToday }: AdminTimetableProps) {
+function AdminTimetable({ events, loading, timetableDate, isViewer, onNavigate, onGoToToday }: AdminTimetableProps) {
   const router = useRouter();
   const weekStart = startOfWeek(timetableDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -548,9 +555,9 @@ function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToda
 
                 {/* Grid + events */}
                 <div
-                  className={`relative ${isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
+                  className={`relative ${isViewer ? "" : isDragging && drag?.dayIdx === dayIdx ? "select-none" : "cursor-crosshair"}`}
                   style={{ width: gridWidth, height: rowHeight }}
-                  onMouseDown={(e) => handleGridMouseDown(e, dayIdx, day)}
+                  onMouseDown={isViewer ? undefined : (e) => handleGridMouseDown(e, dayIdx, day)}
                 >
                   {/* Hour lines */}
                   {hourMarks.map((h) => (
@@ -588,41 +595,49 @@ function AdminTimetable({ events, loading, timetableDate, onNavigate, onGoToToda
                     const height = trackH - 2;
                     const color = event.category.color;
 
-                    return (
+                    const chipContent = (
+                      <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
+                        <div className="text-[10px] font-semibold leading-tight truncate" style={{ color }}>
+                          {formatTime(s)}
+                        </div>
+                        <div className="text-[11px] font-medium leading-tight truncate text-gray-800">
+                          {event.title}
+                        </div>
+                      </div>
+                    );
+                    const chipStyle = {
+                      left: left + 1,
+                      width: Math.max(width - 2, 4),
+                      top: top + 1,
+                      height: height - 2,
+                      borderLeftColor: color,
+                      backgroundColor: color + "22",
+                      opacity: event.status === "CANCELLED" ? 0.45 : 1,
+                    };
+                    return isViewer ? (
+                      <div
+                        key={event.id}
+                        title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
+                        className="absolute rounded overflow-hidden text-left border-l-2"
+                        style={chipStyle}
+                      >
+                        {width >= 44 && chipContent}
+                      </div>
+                    ) : (
                       <Link
                         key={event.id}
                         href={`/admin/events/${event.id}/edit`}
                         title={`${event.title}  ${formatTime(s)}–${formatTime(en)}`}
                         className="absolute rounded overflow-hidden text-left hover:brightness-95 transition-all border-l-2 group"
-                        style={{
-                          left: left + 1,
-                          width: Math.max(width - 2, 4),
-                          top: top + 1,
-                          height: height - 2,
-                          borderLeftColor: color,
-                          backgroundColor: color + "22",
-                          opacity: event.status === "CANCELLED" ? 0.45 : 1,
-                        }}
+                        style={chipStyle}
                       >
-                        {width >= 44 && (
-                          <div className="px-1.5 py-0.5 h-full flex flex-col justify-center overflow-hidden">
-                            <div
-                              className="text-[10px] font-semibold leading-tight truncate"
-                              style={{ color }}
-                            >
-                              {formatTime(s)}
-                            </div>
-                            <div className="text-[11px] font-medium leading-tight truncate text-gray-800">
-                              {event.title}
-                            </div>
-                          </div>
-                        )}
+                        {width >= 44 && chipContent}
                       </Link>
                     );
                   })}
 
                   {/* Drag-to-create selection rectangle */}
-                  {drag && drag.dayIdx === dayIdx && (
+                  {!isViewer && drag && drag.dayIdx === dayIdx && (
                     <div
                       className="absolute top-1 bottom-1 rounded pointer-events-none border border-blue-400 bg-blue-200/40"
                       style={{

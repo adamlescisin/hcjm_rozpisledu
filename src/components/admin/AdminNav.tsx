@@ -14,7 +14,7 @@ const navItems = [
   { href: "/admin/theme", label: "Vzhled", icon: Palette },
 ];
 
-export default function AdminNav() {
+export default function AdminNav({ isViewer = false }: { isViewer?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -31,24 +31,31 @@ export default function AdminNav() {
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-1">
             <span className="font-bold text-sm mr-3 hidden sm:block">HC Junior Mělník</span>
-            {navItems.map(({ href, label, icon: Icon, exact }) => {
-              const active = exact ? pathname === href : pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                    active
-                      ? "bg-white/20 text-white"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  )}
-                >
-                  <Icon size={15} />
-                  <span className="hidden sm:inline">{label}</span>
-                </Link>
-              );
-            })}
+            {navItems
+              .filter(({ href }) => !(isViewer && href === "/admin/theme"))
+              .map(({ href, label, icon: Icon, exact }) => {
+                const active = exact ? pathname === href : pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      active
+                        ? "bg-white/20 text-white"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    )}
+                  >
+                    <Icon size={15} />
+                    <span className="hidden sm:inline">{label}</span>
+                  </Link>
+                );
+              })}
+            {isViewer && (
+              <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide bg-white/20 text-white/80 px-2 py-0.5 rounded-full">
+                Jen čtení
+              </span>
+            )}
           </div>
           <button
             onClick={handleLogout}

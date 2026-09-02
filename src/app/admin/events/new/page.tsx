@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
+import { getAdminRole } from "@/lib/adminAuth";
+import { redirect } from "next/navigation";
 import AdminNav from "@/components/admin/AdminNav";
 import EventForm from "@/components/admin/EventForm";
 
@@ -8,14 +10,17 @@ export default async function NewEventPage({
 }: {
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
-  const [{ start, end }, categories, venues] = await Promise.all([
+  const [{ start, end }, categories, venues, role] = await Promise.all([
     searchParams,
     prisma.eventCategory.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
     }),
     prisma.venue.findMany(),
+    getAdminRole(),
   ]);
+
+  if (role === "VIEWER") redirect("/admin/events");
 
   return (
     <div>

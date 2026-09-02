@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
+import { getAdminRole } from "@/lib/adminAuth";
+import { redirect } from "next/navigation";
 import AdminNav from "@/components/admin/AdminNav";
 import EventForm from "@/components/admin/EventForm";
 import { notFound } from "next/navigation";
@@ -11,7 +13,7 @@ export default async function EditEventPage({
 }) {
   const { id } = await params;
 
-  const [event, categories, venues] = await Promise.all([
+  const [event, categories, venues, role] = await Promise.all([
     prisma.event.findUnique({
       where: { id },
       include: { recurrenceRule: true },
@@ -21,9 +23,11 @@ export default async function EditEventPage({
       orderBy: { sortOrder: "asc" },
     }),
     prisma.venue.findMany(),
+    getAdminRole(),
   ]);
 
   if (!event) notFound();
+  if (role === "VIEWER") redirect("/admin/events");
 
   return (
     <div>

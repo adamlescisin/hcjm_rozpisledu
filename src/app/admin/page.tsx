@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
+import { getAdminRole } from "@/lib/adminAuth";
 import AdminNav from "@/components/admin/AdminNav";
 import Link from "next/link";
 import { Calendar, Tag, DollarSign, Palette, Plus } from "lucide-react";
 
 export default async function AdminDashboard() {
-  const [eventCount, categoryCount, upcomingEvents] = await Promise.all([
+  const [eventCount, categoryCount, upcomingEvents, role] = await Promise.all([
     prisma.event.count({ where: { status: { not: "CANCELLED" } } }),
     prisma.eventCategory.count({ where: { isActive: true } }),
     prisma.event.findMany({
@@ -17,7 +18,10 @@ export default async function AdminDashboard() {
       orderBy: { startDatetime: "asc" },
       take: 5,
     }),
+    getAdminRole(),
   ]);
+
+  const isViewer = role === "VIEWER";
 
   const stats = [
     { label: "Aktivní události", value: eventCount, icon: Calendar, href: "/admin/events" },
@@ -26,17 +30,19 @@ export default async function AdminDashboard() {
 
   return (
     <div>
-      <AdminNav />
+      <AdminNav isViewer={isViewer} />
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-900">Přehled</h1>
-          <Link
-            href="/admin/events/new"
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus size={16} />
-            Nová událost
-          </Link>
+          {!isViewer && (
+            <Link
+              href="/admin/events/new"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus size={16} />
+              Nová událost
+            </Link>
+          )}
         </div>
 
         {/* Stats */}
@@ -61,13 +67,15 @@ export default async function AdminDashboard() {
             <DollarSign size={20} className="text-gray-400" />
             <span className="text-sm font-medium text-gray-600">Cenová pravidla</span>
           </Link>
-          <Link
-            href="/admin/theme"
-            className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow flex items-center gap-3"
-          >
-            <Palette size={20} className="text-gray-400" />
-            <span className="text-sm font-medium text-gray-600">Nastavení vzhledu</span>
-          </Link>
+          {!isViewer && (
+            <Link
+              href="/admin/theme"
+              className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow flex items-center gap-3"
+            >
+              <Palette size={20} className="text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">Nastavení vzhledu</span>
+            </Link>
+          )}
         </div>
 
         {/* Upcoming events */}

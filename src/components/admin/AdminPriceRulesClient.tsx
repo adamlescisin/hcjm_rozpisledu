@@ -37,9 +37,10 @@ const emptyForm = {
 interface Props {
   rules: PriceRule[];
   categories: EventCategory[];
+  isViewer?: boolean;
 }
 
-export default function AdminPriceRulesClient({ rules: initial, categories }: Props) {
+export default function AdminPriceRulesClient({ rules: initial, categories, isViewer = false }: Props) {
   const [rules, setRules] = useState(initial);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -117,13 +118,15 @@ export default function AdminPriceRulesClient({ rules: initial, categories }: Pr
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">Cenová pravidla</h1>
-        <button
-          onClick={() => { setShowAdd(true); setEditId(null); setForm(emptyForm); }}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90"
-        >
-          <Plus size={16} />
-          Nové pravidlo
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => { setShowAdd(true); setEditId(null); setForm(emptyForm); }}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:opacity-90"
+          >
+            <Plus size={16} />
+            Nové pravidlo
+          </button>
+        )}
       </div>
 
       <div className="mb-4 flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
@@ -181,14 +184,16 @@ export default function AdminPriceRulesClient({ rules: initial, categories }: Pr
                 <div className="text-base font-bold text-gray-900 flex-shrink-0">
                   {rule.priceCzk.toLocaleString("cs-CZ")} Kč
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => startEdit(rule)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <Pencil size={15} />
-                  </button>
-                  <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex gap-1">
+                    <button onClick={() => startEdit(rule)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+                      <Pencil size={15} />
+                    </button>
+                    <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminAuth, AdminAuthError } from "@/lib/adminAuth";
 import { eventSchema, recurrenceEventSchema } from "@/lib/validations";
 import { generateRecurringEvents } from "@/lib/recurrence";
 
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-  return user;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdminAuth({ allowViewer: true });
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -31,26 +24,25 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json(events);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    const status = error instanceof AdminAuthError ? error.status : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAdmin();
+    const { supabaseUserId } = await requireAdminAuth({ allowViewer: false });
     const body = await request.json();
 
-    // Check if creating a recurring event
     if (body.recurrence) {
       const data = recurrenceEventSchema.parse(body);
-      const count = await generateRecurringEvents(data, user.id);
+      const count = await generateRecurringEvents(data, supabaseUserId);
       return NextResponse.json({ created: count });
     }
 
     const data = eventSchema.parse(body);
 
-    // Check for conflicts
     const conflicts = await prisma.event.findMany({
       where: {
         venueId: data.venueId,
@@ -78,15 +70,15 @@ export async function POST(request: NextRequest) {
         ...data,
         startDatetime: new Date(data.startDatetime),
         endDatetime: new Date(data.endDatetime),
-        createdBy: user.id,
+        createdBy: supabaseUserId,
       },
       include: { category: true },
     });
 
     return NextResponse.json(event, { status: 201 });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (error instanceof AdminAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Chyba serveru";
     return NextResponse.json({ error: message }, { status: 400 });

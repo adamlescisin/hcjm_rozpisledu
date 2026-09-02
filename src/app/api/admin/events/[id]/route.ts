@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminAuth, AdminAuthError } from "@/lib/adminAuth";
 import { eventUpdateSchema } from "@/lib/validations";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-  return user;
-}
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin();
+    await requireAdminAuth({ allowViewer: true });
     const { id } = await params;
     const event = await prisma.event.findUnique({
       where: { id },
@@ -23,8 +16,9 @@ export async function GET(
     });
     if (!event) return NextResponse.json({ error: "Nenalezeno" }, { status: 404 });
     return NextResponse.json(event);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    const status = error instanceof AdminAuthError ? error.status : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 }
 
@@ -33,19 +27,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin();
+    await requireAdminAuth({ allowViewer: false });
     const { id } = await params;
     const body = await request.json();
     const data = eventUpdateSchema.parse(body);
 
-    // Scope: "this" = only this event, "future" = this and future, "all" = whole series
     const scope = body.scope as "this" | "future" | "all" | undefined;
 
     const existing = await prisma.event.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "Nenalezeno" }, { status: 404 });
 
     if (scope === "all" && existing.recurrenceRuleId) {
-      // Update all events in series
       const updated = await prisma.event.updateMany({
         where: { recurrenceRuleId: existing.recurrenceRuleId },
         data: {
@@ -59,7 +51,6 @@ export async function PATCH(
     }
 
     if (scope === "future" && existing.recurrenceRuleId) {
-      // Update this and all future events in series
       const updated = await prisma.event.updateMany({
         where: {
           recurrenceRuleId: existing.recurrenceRuleId,
@@ -75,7 +66,6 @@ export async function PATCH(
       return NextResponse.json({ updated: updated.count });
     }
 
-    // Check conflicts if times changed
     if (data.startDatetime || data.endDatetime) {
       const startDt = data.startDatetime ? new Date(data.startDatetime) : existing.startDatetime;
       const endDt = data.endDatetime ? new Date(data.endDatetime) : existing.endDatetime;
@@ -114,8 +104,8 @@ export async function PATCH(
 
     return NextResponse.json(event);
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (error instanceof AdminAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Chyba serveru";
     return NextResponse.json({ error: message }, { status: 400 });
@@ -127,7 +117,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin();
+    await requireAdminAuth({ allowViewer: false });
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const scope = searchParams.get("scope") as "this" | "future" | "all" | null;
@@ -156,8 +146,8 @@ export async function DELETE(
     await prisma.event.delete({ where: { id } });
     return NextResponse.json({ deleted: 1 });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (error instanceof AdminAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     return NextResponse.json({ error: "Chyba serveru" }, { status: 500 });
   }
